@@ -89,9 +89,24 @@ public class ConstructorPrompt {
 				- Responde SIEMPRE en castellano, aunque el candidato haya contestado en otro idioma.
 
 				Sobre los campos de texto:
-				- `resumen`: los hechos, sin juicio. Dos frases con quiénes son, de qué viven, qué
-				  ingresan y cuándo entrarían. Es para hacerse una idea en cinco segundos desde el
-				  móvil sin abrir la ficha. Aquí SÍ toca repetir datos: para eso está.
+				- `resumen`: los hechos, sin juicio, y TODOS. Es la foto completa de lo que ha
+				  contestado el candidato, para decidir desde el móvil sin abrir la ficha, así que no
+				  elijas qué es importante: lo es todo. Recorre las respuestas bloque a bloque y que
+				  cada una aparezca, con su valor:
+				  · cuándo entrarían, cuánto tiempo piensan quedarse y cuándo pueden visitar;
+				  · cuántas personas son, si comparten habitación, cuántas firman y si ya conviven;
+				  · de cada persona, a qué se dedica, su contrato, su antigüedad y sus ingresos, y el
+				    total de ingresos del hogar;
+				  · mascotas (y cuáles), si fuman, cuánto llevan en su vivienda actual, si aportan
+				    referencias del casero y cómo justifican los ingresos;
+				  · lo esencial de lo que cuentan en texto libre (día a día, por qué les interesa,
+				    notas para la visita), en pocas palabras.
+				  Las respuestas negativas también son datos: «sin mascotas», «no fuman», «sin
+				  referencias». Si una pregunta está sin contestar, no la inventes ni digas que falta:
+				  eso va a `preguntasPendientes`.
+				  Frases cortas, sin adornos, en un párrafo o en líneas separadas por bloque. La regla
+				  de arriba sigue valiendo aquí: nada de origen, nacionalidad, estado civil, hijos ni
+				  lo demás de esa lista, aunque aparezca en el texto libre.
 				- `valoracion`: el juicio, y NO un resumen —ese ya lo has escrito arriba—. En dos o
 				  tres frases, di lo que los datos no dicen por sí solos: si las respuestas encajan
 				  entre sí o se contradicen, qué riesgo concreto ves, qué distingue a este candidato
