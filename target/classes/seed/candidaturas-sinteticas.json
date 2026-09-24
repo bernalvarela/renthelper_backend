@@ -1,0 +1,146 @@
+[
+  {
+    "token": "sintetica-001",
+    "nombre": "Marta Nogueira Vilas",
+    "idioma": "es",
+    "puntuacionManual": 92,
+    "respuestas": {
+      "fecha_visita": "2026-01-02",
+      "fecha_entrada": "2026-01-05",
+      "franja_visita": ["TARDES_SEMANA", "FINES_SEMANA"],
+      "notas_visita": "Trabajamos los dos hasta las 17h, así que mejor a partir de las 18 o el sábado por la mañana.",
+      "duracion_prevista": "MAS_3_ANOS",
+      "num_personas": 2,
+      "comparten_habitacion": true,
+      "firmantes_contrato": 2,
+      "convivencia_previa": true,
+      "ocupantes": [
+        { "edad": 38, "situacion": "CUENTA_AJENA", "tipo_contrato": "INDEFINIDO", "antiguedad_empleo": "MAS_3_ANOS", "ingresos_netos": "1500_2000" },
+        { "edad": 36, "situacion": "FUNCIONARIO", "tipo_contrato": "INDEFINIDO", "antiguedad_empleo": "MAS_3_ANOS", "ingresos_netos": "1500_2000" }
+      ],
+      "tiene_mascotas": false,
+      "fumadores": false,
+      "tiempo_vivienda_actual": "MAS_5_ANOS",
+      "referencias_casero": true,
+      "justificacion_ingresos": ["NOMINAS", "CONTRATO", "RENTA"],
+      "dia_a_dia": "Trabajamos los dos en horario de oficina, de 8 a 17. Por la tarde estamos en casa con el niño y los fines de semana solemos ir al pueblo. No solemos recibir visitas entre semana.",
+      "motivo_interes": "Llevamos ocho años en el barrio y queremos quedarnos cerca del colegio del niño.",
+      "telefono": "+34600000001",
+      "email": "familia.sintetica@ejemplo.es"
+    }
+  },
+  {
+    "token": "sintetica-002",
+    "nombre": "Brais Outeiro Ferreira",
+    "idioma": "gl",
+    "puntuacionManual": 48,
+    "respuestas": {
+      "fecha_visita": "2026-01-03",
+      "fecha_entrada": "2026-02-01",
+      "franja_visita": ["CUALQUIERA"],
+      "duracion_prevista": "1_3_ANOS",
+      "num_personas": 4,
+      "comparten_habitacion": false,
+      "firmantes_contrato": 4,
+      "convivencia_previa": false,
+      "ocupantes": [
+        { "edad": 24, "situacion": "CUENTA_AJENA", "tipo_contrato": "TEMPORAL", "antiguedad_empleo": "6_12_MESES", "ingresos_netos": "1000_1500" },
+        { "edad": 23, "situacion": "ESTUDIANTE", "ingresos_netos": "MENOS_1000" },
+        { "edad": 25, "situacion": "CUENTA_AJENA", "tipo_contrato": "PRACTICAS", "antiguedad_empleo": "MENOS_6_MESES", "ingresos_netos": "MENOS_1000" },
+        { "edad": 26, "situacion": "CUENTA_AJENA", "tipo_contrato": "TEMPORAL", "antiguedad_empleo": "1_3_ANOS", "ingresos_netos": "1000_1500" }
+      ],
+      "tiene_mascotas": true,
+      "tipo_mascota": "Un gato",
+      "fumadores": false,
+      "tiempo_vivienda_actual": "MENOS_1_ANO",
+      "referencias_casero": true,
+      "justificacion_ingresos": ["NOMINAS", "CONTRATO"],
+      "dia_a_dia": "Somos catro compañeiros de traballo.",
+      "telefono": "+34600000002"
+    }
+  },
+  {
+    "token": "sintetica-003",
+    "nombre": "Lucía Cendán Bermúdez",
+    "idioma": "es",
+    "puntuacionManual": 22,
+    "respuestas": {
+      "fecha_visita": "2026-01-15",
+      "fecha_entrada": "2026-04-01",
+      "franja_visita": ["MANANAS_SEMANA"],
+      "notas_visita": "Estoy fuera de la ciudad hasta el día 12, a partir de ahí cualquier mañana.",
+      "duracion_prevista": "MENOS_1_ANO",
+      "num_personas": 2,
+      "comparten_habitacion": true,
+      "firmantes_contrato": 1,
+      "convivencia_previa": true,
+      "ocupantes": [
+        { "edad": 27, "situacion": "CUENTA_AJENA", "tipo_contrato": "TEMPORAL", "antiguedad_empleo": "MENOS_6_MESES", "ingresos_netos": "1000_1500" },
+        { "edad": 26, "situacion": "SIN_EMPLEO", "ingresos_netos": "NINGUNO" }
+      ],
+      "tiene_mascotas": false,
+      "fumadores": true,
+      "tiempo_vivienda_actual": "MENOS_1_ANO",
+      "referencias_casero": false,
+      "justificacion_ingresos": ["NADA"],
+      "dia_a_dia": "Buscamos algo mientras encontramos piso definitivo.",
+      "telefono": "+34600000003"
+    }
+  },
+  {
+    "token": "sintetica-004",
+    "nombre": "Rubén Castiñeira Lois",
+    "idioma": "es",
+    "puntuacionManual": 66,
+    "respuestas": {
+      "fecha_visita": "2026-01-04",
+      "fecha_entrada": "2026-01-10",
+      "franja_visita": ["CUALQUIERA"],
+      "notas_visita": "Trabajo desde casa, así que me adapto a la hora que mejor os venga.",
+      "duracion_prevista": "MAS_3_ANOS",
+      "num_personas": 1,
+      "firmantes_contrato": 1,
+      "ocupantes": [
+        { "edad": 41, "situacion": "AUTONOMO", "antiguedad_empleo": "MAS_3_ANOS", "ingresos_netos": "2000_3000" }
+      ],
+      "tiene_mascotas": true,
+      "tipo_mascota": "Un perro mediano, muy tranquilo",
+      "fumadores": false,
+      "tiempo_vivienda_actual": "2_5_ANOS",
+      "referencias_casero": true,
+      "justificacion_ingresos": ["TRIMESTRALES", "RENTA", "AVALISTA"],
+      "dia_a_dia": "Trabajo desde casa como diseñador, así que paso el día en el piso pero siempre delante del ordenador. Sin ruido, sin visitas y con el perro acostumbrado a estar tranquilo.",
+      "motivo_interes": "Busco algo exterior y silencioso porque trabajo desde casa, y este encaja.",
+      "telefono": "+34600000004",
+      "email": "autonomo.sintetico@ejemplo.es"
+    }
+  },
+  {
+    "token": "sintetica-005",
+    "nombre": "Iván Pardo Seoane",
+    "idioma": "es",
+    "puntuacionManual": 35,
+    "respuestas": {
+      "fecha_visita": "2026-01-02",
+      "fecha_entrada": "2026-01-02",
+      "franja_visita": ["TARDES_SEMANA"],
+      "duracion_prevista": "NO_SE",
+      "num_personas": 3,
+      "comparten_habitacion": true,
+      "firmantes_contrato": 1,
+      "convivencia_previa": true,
+      "ocupantes": [
+        { "edad": 30, "situacion": "CUENTA_AJENA", "tipo_contrato": "INDEFINIDO", "antiguedad_empleo": "1_3_ANOS", "ingresos_netos": "1500_2000" },
+        { "edad": 31, "situacion": "SIN_EMPLEO", "ingresos_netos": "NINGUNO" },
+        { "edad": 2, "situacion": "SIN_EMPLEO", "ingresos_netos": "NINGUNO" }
+      ],
+      "tiene_mascotas": false,
+      "fumadores": false,
+      "tiempo_vivienda_actual": "1_2_ANOS",
+      "referencias_casero": false,
+      "justificacion_ingresos": ["NOMINAS"],
+      "dia_a_dia": "ok",
+      "telefono": "+34600000005"
+    }
+  }
+]

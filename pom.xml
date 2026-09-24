@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>4.1.1</version>
+		<relativePath/>
+	</parent>
+	<groupId>es.agata.renthelper</groupId>
+	<artifactId>renthelper-backend</artifactId>
+	<version>0.1.0-SNAPSHOT</version>
+	<name>renthelper-backend</name>
+	<description>Triaje de candidatos a inquilino</description>
+
+	<properties>
+		<java.version>25</java.version>
+		<spring-ai.version>2.0.0</spring-ai.version>
+	</properties>
+
+	<!--
+	  Spring AI no lo gestiona el parent de Spring Boot: su BOM fija aquí la versión de
+	  todos sus módulos. Si el arranque falla por incompatibilidad con el parent, la
+	  propiedad de arriba es lo único que hay que tocar.
+	-->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.springframework.ai</groupId>
+				<artifactId>spring-ai-bom</artifactId>
+				<version>${spring-ai.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<!--
+		  Para enviarle al candidato su enlace de continuación. El bean JavaMailSender sólo se
+		  autoconfigura si hay `spring.mail.host`, así que sin SMTP configurado la aplicación
+		  arranca igual y el correo se escribe en el log.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<!--
+		  H2 para el bucle de desarrollo local. Las migraciones de Flyway son de Postgres
+		  (jsonb, arrays, índices parciales) y no se pueden ejecutar aquí: en el perfil dev
+		  Flyway se desactiva y el esquema lo genera Hibernate desde las entidades. Los datos
+		  iniciales los pone SembradorDatos, que funciona igual en las dos bases.
+		-->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-h2console</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!--
+		  Un único cliente para TODOS los proveedores.
+
+		  Groq, OpenRouter, Together, Ollama y también Gemini publican un endpoint compatible con
+		  la API de OpenAI, así que url base + clave + nombre de modelo describe a cualquiera de
+		  ellos. Por eso los proveedores viven en la base de datos y se configuran desde el panel:
+		  añadir uno nuevo no toca este fichero ni obliga a desplegar.
+
+		  De ahí que ya no esté el starter de `google-genai`: su cliente nativo obligaba a una
+		  rama aparte en el código para no ganar nada que el endpoint compatible no dé.
+		-->
+		<dependency>
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-starter-model-openai</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+</project>

@@ -1,0 +1,170 @@
+spring:
+  application:
+    name: renthelper
+
+  # El MISMO .env que usa Docker Compose, leído también por Spring en local.
+  #
+  # Spring no entiende el formato `.env` como tal, pero el fichero es sintácticamente un
+  # .properties: la pista `[.properties]` le dice cómo parsearlo. Las claves quedan con su
+  # nombre literal (GEMINI_API_KEY, TELEGRAM_BOT_TOKEN...), que es justo lo que referencian
+  # los ${...} de más abajo.
+  #
+  # Dos rutas porque el directorio de trabajo cambia: `../.env` al lanzar desde backend/ con
+  # mvnw, `./.env` al lanzar desde la raíz. `optional:` hace que la ausencia no rompa nada —y
+  # en el contenedor no existe, porque el .env lo consume Compose en el host, no se copia a
+  # la imagen.
+  #
+  # Tiene que estar aquí y no en application-dev.yml: Spring Boot rechaza spring.config.import
+  # dentro de un fichero específico de perfil.
+  config:
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:./.env[.properties]
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/renthelper}
+    username: ${SPRING_DATASOURCE_USERNAME:renthelper}
+    password: ${SPRING_DATASOURCE_PASSWORD:renthelper}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: Europe/Madrid
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      # Jackson 3 invirtió este valor por defecto: un primitivo ausente pasó de tomar su valor
+      # por defecto a reventar. Los esquemas y las rúbricas se editan a mano en el panel y
+      # omiten `requerido`, `descarteAutomaticoActivo` y compañía constantemente. Ausente =
+      # false / 0 es exactamente la semántica que queremos, y lo contrario obligaría a escribir
+      # `"requerido": false` en cada campo opcional del JSON.
+      fail-on-null-for-primitives: false
+
+  # El starter de OpenAI está aquí sólo como LIBRERÍA: los modelos se construyen a mano en
+  # FabricaModelos con la url, la clave y el modelo que salen de la base de datos.
+  #
+  # Sin desactivar esto, sus autoconfiguraciones se crean igualmente al arrancar —chat, audio,
+  # imagen, embeddings, moderación— y revientan buscando `spring.ai.openai.api-key`, que ya no
+  # existe porque la clave dejó de estar en un fichero. El fallo aparece en el bean de voz, que
+  # no tiene nada que ver con nada de esto.
+  ai:
+    model:
+      chat: none
+      embedding: none
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: 8080
+  forward-headers-strategy: framework
+  compression:
+    enabled: true
+    mime-types: text/html,text/css,application/javascript,application/json
+  error:
+    include-message: never
+
+management:
+  endpoints.web.exposure.include: health
+  endpoint.health.probes.enabled: true
+
+renthelper:
+  url-publica: ${RENTHELPER_URL_PUBLICA:http://localhost:5173}
+
+  # Clave con la que se cifran los secretos que se guardan desde el panel: claves de API,
+  # contraseña del SMTP y token del bot. Vive aquí y NO en la base de datos, que es lo único
+  # que hace útil el cifrado: quien se lleve una copia de la base no se lleva con qué abrirla.
+  #
+  # Si falta, la aplicación arranca y el panel funciona, pero usa una clave de un solo uso y lo
+  # que cifres hoy no se podrá descifrar tras reiniciar. El arranque lo avisa.
+  clave-maestra: ${RENTHELPER_CLAVE_MAESTRA:}
+
+  # El perfil dev lo pone a true: en local los datos te los inventas tú. En producción NUNCA,
+  # o el tier gratuito de Gemini acabaría evaluando candidaturas reales.
+  sinteticas-por-defecto: false
+
+  admin:
+    email: ${RENTHELPER_ADMIN_EMAIL:admin@local}
+    # BCrypt generado fuera (ver README). Si se deja vacío se usa `password`, que el arranque
+    # cifra solo; eso es para desarrollo, en producción va siempre el hash.
+    password-hash: ${RENTHELPER_ADMIN_PASSWORD_HASH:}
+    password: ${RENTHELPER_ADMIN_PASSWORD:}
+
+  # Límite por IP sobre los endpoints públicos. Con 150 contactos legítimos en 20 horas
+  # no se puede apretar mucho: esto frena bots, no candidatos.
+  rate-limit:
+    altas-por-ip-hora: 10
+    peticiones-por-ip-minuto: 90
+
+  retencion:
+    # Borra candidaturas no seleccionadas pasados estos meses (RGPD).
+    meses: 6
+    cron: "0 30 4 * * *"
+
+  outbox:
+    # El poller es además el rate limiter del LLM, y el número que manda es el RPM del
+    # proveedor: los `flash-lite` admiten 15 peticiones por minuto.
+    #
+    # Cuidado con la cuenta, porque cada candidatura son DOS llamadas —verificación de nombre y
+    # evaluación—. Con lote 2 cada 15 s salen 8 peticiones por minuto, que deja margen. Con
+    # lote 3 eran 24 y se pasaba de largo: el 429 no habría sido por agotar el cupo diario sino
+    # por ir demasiado deprisa, que es un fallo mucho más tonto.
+    #
+    # Aun así se despachan 150 candidaturas en unos veinte minutos, y esto es trabajo de fondo
+    # que no estás mirando.
+    intervalo-ms: 15000
+    lote: 2
+    max-intentos: 5
+    backoff-base-segundos: 60
+    # Cuota agotada o proveedor saturado no es un fallo, es una espera. Se reintenta cada hora
+    # durante un día: el tier gratuito de Gemini tiene cuota DIARIA, así que un backoff
+    # exponencial de minutos no sirve de nada.
+    aplazamiento-minutos: 60
+    max-aplazamientos: 24
+
+  telegram:
+    # Digest por tiempo. Nada entre las 22:00 y las 9:00: lo de la noche se acumula.
+    digest-cron: "0 0 9,12,15,18,21 * * *"
+
+  llm:
+    # v4: la valoración menciona siempre la solvencia. Antes: v3 separó resumen de valoración y
+    # metió el veredicto del nombre en la misma llamada. Se guarda en cada evaluación, así que las
+    # anteriores siguen identificadas con su versión y la comparación entre ellas no miente.
+    prompt-version: v4
+    ajuste-maximo: 15
+    # Se aplican a todos los proveedores al construir su cliente.
+    #
+    # En modelos de razonamiento el techo es `maxCompletionTokens`, no `maxTokens`: son
+    # excluyentes y poner el otro da error de API. Y cuenta la cadena de pensamiento, que no se
+    # ve pero se paga, así que sin techo una respuesta desbocada se lleva la cuota de golpe.
+    temperatura: 0.2
+    # 1200 se quedaba corto desde que se piden dos textos (resumen y valoración) con cifras
+    # citadas: la respuesta se cortaba a media frase y el JSON llegaba sin cerrar.
+    max-tokens-salida: 2500
+    # Pide además el veredicto sobre el nombre en la MISMA llamada, así que no cuesta una petición
+    # extra. Es una marca para el panel, nunca puntúa. Ojo: con esto a true el nombre SÍ sale hacia
+    # el proveedor; a false no sale nunca y el resto de la evaluación funciona igual.
+    verificar-nombre: true
+
+logging:
+  level:
+    es.agata.renthelper: INFO
+    # Nada de SQL en el log: el ruido tapa las trazas de negocio, que son las que sirven para
+    # seguir lo que hace la aplicación.
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level %-42logger{42} : %msg%n"
