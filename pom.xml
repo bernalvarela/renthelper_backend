@@ -89,6 +89,16 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!--
+		  Quien pone Flyway en marcha al arrancar. En Spring Boot 4 la autoconfiguración se partió
+		  en módulos: flyway-core trae la biblioteca pero NO la autoconfiguración, así que sin esto
+		  Flyway está en el classpath y no se ejecuta nunca, sin un aviso en el log. En producción
+		  eso es `ddl-auto: validate` contra una base vacía. Mismo patrón que spring-boot-h2console.
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-flyway</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-core</artifactId>
@@ -127,11 +137,95 @@
 		</dependency>
 	</dependencies>
 
+	<profiles>
+		<!--
+		  Binario nativo totalmente estático, enlazado contra musl (se usa junto al perfil "native"
+		  del parent de Spring Boot). Sin glibc en tiempo de ejecución, así que corre en cualquier
+		  x86-64: los binarios enlazados con la glibc del contenedor de compilación exigen
+		  x86-64-v2 y no arrancan en CPUs viejas o en modelos de CPU genéricos de una VM
+		  ("CPU ISA level is lower than required").
+		  Necesita la toolchain musl de GraalVM (ghcr.io/graalvm/native-image-community:25-muslib,
+		  o setup-graalvm con native-image-musl en GitHub Actions).
+		-->
+		<profile>
+			<id>native-static</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.graalvm.buildtools</groupId>
+						<artifactId>native-maven-plugin</artifactId>
+						<configuration>
+							<buildArgs combine.children="append">
+								<buildArg>--static</buildArg>
+								<buildArg>--libc=musl</buildArg>
+							</buildArgs>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
+		<!--
+		  Compilación rápida, para integración continua.
+
+		  "Quick build" (-Ob) tarda bastante menos y, sobre todo, necesita bastante menos memoria,
+		  a cambio de un binario algo más lento en régimen. El runner de GitHub tiene 8 GB y
+		  native-image se acerca a ese techo en modo normal. Aquí el tiempo se va en la base de
+		  datos y en las llamadas al LLM, no en el código compilado.
+		-->
+		<profile>
+			<id>native-quick</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.graalvm.buildtools</groupId>
+						<artifactId>native-maven-plugin</artifactId>
+						<configuration>
+							<buildArgs combine.children="append">
+								<buildArg>-Ob</buildArg>
+							</buildArgs>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+
 	<build>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!--
+			  Imagen nativa de GraalVM. El perfil "native" del parent de Spring Boot añade el
+			  procesado AOT y los metadatos del repositorio de GraalVM:
+			      ./mvnw -Pnative,native-static -DskipTests native:compile  -> target/renthelper-backend
+			  Necesita un JDK GraalVM 25 (ver Dockerfile y .github/workflows/main.yml).
+			-->
+			<plugin>
+				<groupId>org.graalvm.buildtools</groupId>
+				<artifactId>native-maven-plugin</artifactId>
+				<configuration>
+					<imageName>renthelper-backend</imageName>
+					<buildArgs>
+						<!--
+						  es-ES como locale por defecto. native-image sólo incluye los datos de los
+						  locales que conoce al compilar, y MotorDeterminista formatea con es-ES (coma
+						  decimal).
+						-->
+						<buildArg>-Duser.language=es</buildArg>
+						<buildArg>-Duser.country=ES</buildArg>
+						<!-- Que falle la compilación, no el arranque, si algo no se puede compilar -->
+						<buildArg>--no-fallback</buildArg>
+						<!--
+						  CPU objetivo portable. Por defecto native-image apunta a x86-64-v3 (AVX2), que
+						  un NAS o una VM vieja pueden no tener. "compatibility" corre en cualquier x86-64
+						  a cambio de algo de velocidad.
+						-->
+						<buildArg>-march=compatibility</buildArg>
+					</buildArgs>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

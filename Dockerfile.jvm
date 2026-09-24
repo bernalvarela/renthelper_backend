@@ -1,0 +1,31 @@
+# Backend de RentHelper (con el bundle del frontend commiteado en src/main/resources/static)
+# sobre una JRE normal. Alternativa a la imagen nativa: compila en un par de minutos y sin pedir
+# 7 GB de memoria, a cambio de una imagen más grande y un arranque más lento.
+#
+#   docker build -f Dockerfile.jvm -t renthelper-backend .
+
+# ---- compilación ---------------------------------------------------------------------------
+FROM eclipse-temurin:25-jdk AS build
+WORKDIR /src
+
+COPY .mvn .mvn
+COPY mvnw pom.xml ./
+RUN chmod +x mvnw && ./mvnw -q -B dependency:go-offline
+
+COPY src src
+# Los tests se pasan en CI antes de construir la imagen; aquí sólo se empaqueta
+RUN ./mvnw -q -B -DskipTests package && mv target/renthelper-backend-*.jar target/app.jar
+
+# ---- ejecución -----------------------------------------------------------------------------
+FROM eclipse-temurin:25-jre-alpine
+WORKDIR /app
+
+RUN apk add --no-cache wget && adduser -D -u 10001 renthelper
+USER renthelper
+
+COPY --from=build /src/target/app.jar app.jar
+
+EXPOSE 8080
+
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75"
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

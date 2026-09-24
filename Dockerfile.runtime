@@ -1,0 +1,26 @@
+# Imagen de ejecución para un binario nativo de renthelper-backend compilado FUERA de Docker.
+# CI lo compila en el runner con la toolchain musl de GraalVM (ver .github/workflows/main.yml) y
+# aquí sólo se copia. Espera el binario estático en target/renthelper-backend:
+#
+#   ./mvnw -Pnative,native-static -DskipTests native:compile
+#   docker build -f Dockerfile.runtime -t renthelper-backend .
+#
+# Dockerfile es la variante autocontenida, que compila dentro de la etapa de build.
+
+# El binario es estático: la base sólo aporta un usuario, certificados de CA (Telegram, SMTP,
+# proveedores de LLM), datos de zona horaria y wget para el healthcheck de docker-compose.
+FROM debian:bookworm-slim
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system renthelper && useradd --system --gid renthelper --home /app renthelper
+USER renthelper
+
+COPY target/renthelper-backend /app/renthelper-backend
+
+EXPOSE 8080
+
+# La imagen nativa acepta los flags de heap de siempre (p. ej. -Xmx256m)
+ENV JAVA_OPTS=""
+ENTRYPOINT ["sh", "-c", "exec /app/renthelper-backend $JAVA_OPTS"]

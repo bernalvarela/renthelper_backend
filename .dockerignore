@@ -1,0 +1,13 @@
+target/
+# salvo el binario nativo que Dockerfile.runtime copia a la imagen
+!target/renthelper-backend
+data/
+.claude/
+.git/
+.github/
+.idea/
+.vscode/
+*.iml
+*.log
+.env
+.env.*

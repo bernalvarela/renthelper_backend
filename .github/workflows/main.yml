@@ -1,0 +1,133 @@
+name: Build and push Docker image
+
+# Cada push pasa los tests. Los push a la rama por defecto (master) y los tags de versión v*
+# además compilan la imagen nativa y la publican en Docker Hub como
+# <DOCKER_USERNAME>/renthelper-backend.
+#
+# Secrets del repositorio (Settings > Secrets and variables > Actions):
+#   DOCKER_USERNAME  usuario de Docker Hub
+#   DOCKER_PASSWORD  access token de Docker Hub (Account settings > Security), no la contraseña
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    # Cambiar un documento no cambia el binario: no se compila nada por eso.
+    paths-ignore: ['**.md', '.gitignore']
+  pull_request:
+  workflow_dispatch:
+
+# Dos push seguidos no compilan dos veces: el primero se cancela. Una compilación nativa son
+# quince minutos largos de runner, y el binario del commit de en medio no lo quiere nadie.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: renthelper-backend
+
+jobs:
+  test:
+    name: Maven tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run tests
+        run: ./mvnw -B test
+
+  docker:
+    name: Native Docker image
+    needs: test
+    # Sólo se publica desde la rama por defecto y desde tags de versión; los PR y el resto de
+    # ramas se quedan en los tests.
+    if: github.event_name != 'pull_request' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      # Sitio en disco y colchón de memoria, antes de instalar nada.
+      #
+      # El runner trae .NET, el SDK de Android y Haskell, que aquí sobran y ocupan más de veinte
+      # gigas: se borran para dejar sitio al fichero de intercambio, al binario y a las capas de
+      # la imagen. La caché de herramientas (AGENT_TOOLSDIRECTORY) NO se toca: ahí deja
+      # setup-graalvm el JDK.
+      #
+      # El intercambio: el runner tiene 8 GB y native-image se acerca a eso. Sin colchón, el
+      # sistema mata la compilación a medias ("exit status 137"). Va en /mnt, el disco efímero
+      # grande, cuando existe, y con nombre propio para no pisar el /mnt/swapfile del runner.
+      - name: Sitio en disco y colchón de memoria
+        run: |
+          set -euo pipefail
+          df -h
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost || true
+          sudo docker image prune -af || true
+
+          colchon=/intercambio-extra
+          if mountpoint -q /mnt; then colchon=/mnt/intercambio-extra; fi
+          sudo fallocate -l 8G "$colchon"
+          sudo chmod 600 "$colchon"
+          sudo mkswap "$colchon"
+          sudo swapon "$colchon"
+          free -h
+          df -h
+
+      # GraalVM con la toolchain musl: el binario se compila aquí, en el runner (toda la CPU y
+      # ~/.m2 en caché entre ejecuciones), y Dockerfile.runtime sólo lo copia a la imagen.
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm-community'
+          native-image-musl: 'true'
+          cache: 'maven'
+
+      # -Pnative-quick: "quick build" (-Ob), menos memoria y menos tiempo; ver pom.xml. El límite
+      # corta una compilación atascada en vez de dejarla consumiendo el runner hasta las seis horas.
+      - name: Compile native binary
+        timeout-minutes: 45
+        run: ./mvnw -B -Pnative,native-static,native-quick -DskipTests native:compile
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Tags: latest (rama por defecto), el sha corto del commit y la versión en los tags v*
+      # (v1.2.3 -> 1.2.3 y 1.2)
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: docker.io/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # El binario ya está compilado: esto sólo monta la imagen pequeña de ejecución (la caché de
+      # GHA mantiene caliente la capa del apt-get entre ejecuciones).
+      - name: Build and push (native image)
+        uses: docker/build-push-action@v7
+        timeout-minutes: 15
+        with:
+          context: .
+          file: Dockerfile.runtime
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha

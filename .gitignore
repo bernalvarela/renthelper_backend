@@ -9,9 +9,9 @@ data/
 *.mv.db
 *.trace.db
 
-# Bundle del frontend copiado en el build (ver Dockerfile)
-src/main/resources/static/
-!src/main/resources/static/.gitkeep
+# OJO: src/main/resources/static NO se ignora. Es el bundle del frontend y va commiteado: la
+# imagen nativa se compila sólo desde este repo. Se regenera con `npm run build:backend` en
+# frontend/.
 
 # Entorno y logs
 .env
