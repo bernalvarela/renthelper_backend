@@ -86,7 +86,12 @@ public final class DtosAdmin {
 			/** Por qué no hay valoración del modelo. Es un fallo o una omisión, no un resumen. */
 			String errorIa,
 			String telefono,
-			String email) {
+			String email,
+			/**
+			 * Hay una evaluación en cola: el panel pone un indicador en la fila. Es cuándo está
+			 * programada; si es más tarde que ahora, está aplazada esperando cuota. Null si no hay.
+			 */
+			Instant evaluacionProgramada) {
 	}
 
 	public record EvaluacionDto(

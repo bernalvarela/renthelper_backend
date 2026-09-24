@@ -210,8 +210,12 @@ public class ServicioAdmin {
 		// Los ajustes se leen UNA vez y se pasan a cada fila. Dejar que `aFila` los buscara por su
 		// cuenta serían ciento cincuenta consultas idénticas para responder a una sola pantalla.
 		Ajustes ajustes = repoAjustes.findFirstBy().orElse(null);
-		return repoCandidaturas.paraTriaje(anuncioId, incluirBorradores).stream()
-				.map(c -> aFila(c, ajustes))
+		List<Candidatura> candidaturas = repoCandidaturas.paraTriaje(anuncioId, incluirBorradores);
+		// Lo mismo con la cola: una consulta para todas las filas, no una por fila.
+		Map<UUID, java.time.Instant> enCola =
+				outbox.evaluacionesEnCola(candidaturas.stream().map(Candidatura::getId).toList());
+		return candidaturas.stream()
+				.map(c -> aFila(c, ajustes, enCola.get(c.getId())))
 				.toList();
 	}
 
@@ -574,10 +578,12 @@ public class ServicioAdmin {
 	}
 
 	private DtosAdmin.FilaCandidatura aFila(Candidatura candidatura) {
-		return aFila(candidatura, repoAjustes.findFirstBy().orElse(null));
+		return aFila(candidatura, repoAjustes.findFirstBy().orElse(null),
+				outbox.evaluacionesEnCola(List.of(candidatura.getId())).get(candidatura.getId()));
 	}
 
-	private DtosAdmin.FilaCandidatura aFila(Candidatura candidatura, Ajustes ajustes) {
+	private DtosAdmin.FilaCandidatura aFila(Candidatura candidatura, Ajustes ajustes,
+	                                        java.time.Instant evaluacionProgramada) {
 		BonificacionFiscal.Resultado fiscal =
 				bonificacionFiscal.evaluar(ajustes, candidatura.getRespuestas());
 		Optional<Evaluacion> principal = repoEvaluaciones
@@ -601,7 +607,8 @@ public class ServicioAdmin {
 				fiscal.grado() == null ? null : fiscal.grado().name(),
 				fiscal.resumen(),
 				principal.map(Evaluacion::getError).orElse(null),
-				candidatura.getTelefonoNormalizado(), candidatura.getEmail());
+				candidatura.getTelefonoNormalizado(), candidatura.getEmail(),
+				evaluacionProgramada);
 	}
 
 	private DtosAdmin.EvaluacionDto aDto(Evaluacion e) {

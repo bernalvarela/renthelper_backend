@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,6 +39,14 @@ public interface RepositorioOutbox extends JpaRepository<MensajeOutbox, UUID> {
 	}
 
 	long countByEstado(MensajeOutbox.Estado estado);
+
+	/**
+	 * Las evaluaciones en cola de esas candidaturas, para que el panel marque qué filas se están
+	 * repuntuando. Entidades y no una proyección: así no hace falta registrar nada más para la
+	 * imagen nativa.
+	 */
+	List<MensajeOutbox> findByTipoAndEstadoAndReferenciaIdIn(MensajeOutbox.Tipo tipo, MensajeOutbox.Estado estado,
+	                                                         Collection<UUID> referencias);
 
 	/** Lo último que ha pasado, para el panel de actividad. Incluye lo ya procesado. */
 	List<MensajeOutbox> findTop30ByOrderByCreadoEnDesc();

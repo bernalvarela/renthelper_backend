@@ -6,6 +6,8 @@ import es.agata.renthelper.repositorio.RepositorioOutbox;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -54,6 +56,26 @@ public class ServicioOutbox {
 			mensaje.setPayload(payload);
 		}
 		repositorio.save(mensaje);
+	}
+
+	/**
+	 * Qué candidaturas tienen una evaluación en cola, y para cuándo está programada.
+	 *
+	 * <p>Es lo que permite al panel poner un indicador en la fila mientras se repuntúa: sin esto,
+	 * pedir la repuntuación no cambiaba nada visible hasta que el outbox la procesaba. La hora
+	 * distingue «en unos segundos» de «aplazada una hora porque se agotó la cuota».
+	 */
+	@Transactional(readOnly = true)
+	public Map<UUID, Instant> evaluacionesEnCola(Collection<UUID> candidaturas) {
+		if (candidaturas.isEmpty()) {
+			return Map.of();
+		}
+		Map<UUID, Instant> programadas = new java.util.HashMap<>();
+		repositorio.findByTipoAndEstadoAndReferenciaIdIn(MensajeOutbox.Tipo.EVALUAR_CANDIDATURA,
+						MensajeOutbox.Estado.PENDIENTE, candidaturas)
+				.forEach(m -> programadas.merge(m.getReferenciaId(), m.getProximaEjecucion(),
+						(a, b) -> a.isBefore(b) ? a : b));
+		return programadas;
 	}
 
 	/**
