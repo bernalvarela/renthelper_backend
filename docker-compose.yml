@@ -1,0 +1,145 @@
+# Server deployment of RentHelper from the image published by GitHub Actions, served at
+# https://renthelper.duckdns.org.
+#
+# RentHelper has NO PostgreSQL of its own: it uses BoxVault's (container "boxvault-db"), with its
+# own database and role. BoxVault's stack must be up first. Compose cannot wait for a container
+# of another project, so if the database is not ready the app exits and "restart" retries it.
+#
+# --- One-time setup ------------------------------------------------------------------------
+#
+# 1. Database and role inside boxvault-db. Its init scripts only run on an empty volume, so this
+#    is done by hand, once. Use the same long random password you put in .env as
+#    RENTHELPER_DB_PASSWORD:
+#
+#      docker exec -i boxvault-db psql -U boxvault -d boxvault <<'SQL'
+#      CREATE ROLE renthelper LOGIN PASSWORD 'the-RENTHELPER_DB_PASSWORD';
+#      CREATE DATABASE renthelper OWNER renthelper;
+#      -- By default any role may CONNECT to any database: keep each app in its own.
+#      REVOKE CONNECT ON DATABASE renthelper FROM PUBLIC;
+#      REVOKE CONNECT ON DATABASE boxvault FROM PUBLIC;
+#      SQL
+#
+#    Flyway creates the tables on the first start of the app.
+#
+# 2. The subdomain renthelper.duckdns.org registered in DuckDNS and pointing to the same IP as
+#    boxvault.duckdns.org. Traefik gets the certificate by itself on the first request.
+#
+# 3. A .env next to this file:
+#
+#      DOCKER_IMAGE=<docker-hub-user>/renthelper-backend:latest
+#      RENTHELPER_DB_PASSWORD=<same as in step 1>
+#      RENTHELPER_ADMIN_EMAIL=<panel login>
+#      RENTHELPER_ADMIN_PASSWORD=<panel password, in clear; the app hashes it with BCrypt>
+#      RENTHELPER_CLAVE_MAESTRA=<openssl rand -hex 32; never change it, see below>
+#
+#    RENTHELPER_CLAVE_MAESTRA encrypts the secrets saved from the panel (API keys, SMTP
+#    password, Telegram token). If you lose it they cannot be recovered and must be typed again.
+#    Keep a copy outside the server: it is NOT in the database backup, on purpose.
+#
+#    LLM providers, SMTP and Telegram are configured in the panel (Ajustes). The optional
+#    variables further down are only read on the very first start, to import them.
+#
+# 4. Keep this file and ./deploy/backup/*.sh together in the deployment directory, then:
+#
+#      docker compose pull && docker compose up -d
+#
+# --- Networks ------------------------------------------------------------------------------
+#
+# traefik-net: created by the Traefik stack, as for BoxVault.
+# boxvault-net: BoxVault's internal network, where boxvault-db lives. Compose prefixes it with
+# BoxVault's project name (its directory name), so the real name is usually
+# "boxvault_boxvault-net". Check it with `docker network ls` and, if it differs, set
+# BOXVAULT_NETWORK in .env.
+#
+# Updates: BoxVault's watchtower runs with --label-enable and watches every container on the
+# host carrying the label, not only its own project's, so it also redeploys this app when a new
+# image is published. No second watchtower is needed.
+services:
+  renthelper:
+    image: ${DOCKER_IMAGE:?set DOCKER_IMAGE in .env}
+    container_name: renthelper
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://boxvault-db:5432/${RENTHELPER_DB:-renthelper}
+      SPRING_DATASOURCE_USERNAME: ${RENTHELPER_DB_USER:-renthelper}
+      SPRING_DATASOURCE_PASSWORD: ${RENTHELPER_DB_PASSWORD:?set RENTHELPER_DB_PASSWORD in .env}
+      RENTHELPER_URL_PUBLICA: https://renthelper.duckdns.org
+      RENTHELPER_ADMIN_EMAIL: ${RENTHELPER_ADMIN_EMAIL:?set RENTHELPER_ADMIN_EMAIL in .env}
+      # One of the two. The hash starts with $2y$...: write each $ as $$ in .env, or Compose
+      # takes it for a variable.
+      RENTHELPER_ADMIN_PASSWORD: ${RENTHELPER_ADMIN_PASSWORD:-}
+      RENTHELPER_ADMIN_PASSWORD_HASH: ${RENTHELPER_ADMIN_PASSWORD_HASH:-}
+      RENTHELPER_CLAVE_MAESTRA: ${RENTHELPER_CLAVE_MAESTRA:?set RENTHELPER_CLAVE_MAESTRA in .env}
+      # Optional, only read on the first start (see step 3). Afterwards, the panel.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      CORREO_REMITENTE: ${CORREO_REMITENTE:-}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # Native images accept the usual heap flags; far less is needed than on the JVM
+      JAVA_OPTS: "-Xmx384m"
+      TZ: Europe/Madrid
+    # No published port: the only way in is https://renthelper.duckdns.org through Traefik.
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+      traefik.enable: "true"
+      # Two networks: tell Traefik which one reaches the app.
+      traefik.docker.network: "traefik-net"
+      traefik.http.routers.renthelper-https.entrypoints: "websecure"
+      traefik.http.routers.renthelper-https.rule: "Host(`renthelper.duckdns.org`)"
+      traefik.http.routers.renthelper-https.tls: "true"
+      traefik.http.routers.renthelper-https.tls.certresolver: "letsencrypt"
+      traefik.http.services.renthelper.loadbalancer.server.port: "8080"
+      # Defence in depth on the public form: the app has its own per-IP limit as well.
+      traefik.http.routers.renthelper-https.middlewares: "renthelper-ratelimit"
+      traefik.http.middlewares.renthelper-ratelimit.ratelimit.average: "60"
+      traefik.http.middlewares.renthelper-ratelimit.ratelimit.burst: "120"
+      traefik.http.middlewares.renthelper-ratelimit.ratelimit.period: "1m"
+    restart: unless-stopped
+    # traefik-net to be reachable by Traefik, boxvault-net to reach the database.
+    networks: [traefik-net, boxvault-net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # Nightly dump of the renthelper database in ${RENTHELPER_BACKUP_DIR}, deleting the ones older
+  # than ${BACKUP_KEEP_DAYS} days. BoxVault's backup only dumps its own database.
+  #
+  # Same image as boxvault-db: pg_dump must be the same version as the server or newer. If
+  # BoxVault's PostgreSQL is upgraded, upgrade this tag with it.
+  backup:
+    image: postgres:18.6-alpine
+    container_name: renthelper-backup
+    environment:
+      POSTGRES_HOST: boxvault-db
+      POSTGRES_DB: ${RENTHELPER_DB:-renthelper}
+      POSTGRES_USER: ${RENTHELPER_DB_USER:-renthelper}
+      POSTGRES_PASSWORD: ${RENTHELPER_DB_PASSWORD:?set RENTHELPER_DB_PASSWORD in .env}
+      # 15 minutes after BoxVault's, so the two dumps don't compete for the disk.
+      BACKUP_CRON: ${BACKUP_CRON:-45 3 * * *}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      # "true" makes a copy right at start-up: handy the first time, to check the mounts.
+      BACKUP_ON_START: ${BACKUP_ON_START:-false}
+      TZ: Europe/Madrid
+    volumes:
+      - ./deploy/backup:/opt/backup:ro
+      # Point this at a disk other than the data one, or a network share, if you can.
+      - ${RENTHELPER_BACKUP_DIR:-./backups}:/backups
+    entrypoint: ["sh", "/opt/backup/entrypoint.sh"]
+    restart: unless-stopped
+    networks: [boxvault-net]
+
+networks:
+  # Created by the Traefik stack; this project only joins it.
+  traefik-net:
+    external: true
+  # BoxVault's internal network, where boxvault-db lives (see "Networks" above).
+  boxvault-net:
+    external: true
+    name: ${BOXVAULT_NETWORK:-boxvault_boxvault-net}

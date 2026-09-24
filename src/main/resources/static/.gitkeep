@@ -1,2 +1,0 @@
-# El build del frontend deja aquí index.html, admin.html y assets/.
-# En desarrollo se sirve desde Vite (puerto 5173) con proxy al 8080.

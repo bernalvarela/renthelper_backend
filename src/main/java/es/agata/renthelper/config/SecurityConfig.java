@@ -1,5 +1,6 @@
 package es.agata.renthelper.config;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -50,6 +51,13 @@ public class SecurityConfig {
 				.authorizeHttpRequests(peticiones -> peticiones
 						// Formulario del candidato y recursos del bundle público.
 						.requestMatchers("/", "/c/**", "/api/publico/**").permitAll()
+						// Los HTML de las dos SPAs. /c/{slug} y /admin/** no se sirven tal cual:
+						// ConfiguracionWeb los reenvía a estos ficheros, y el reenvío pasa otra vez
+						// por esta cadena. Sin esto, la ruta estaba permitida pero su forward no, y
+						// en producción (en local los sirve Vite) todo acababa en 401.
+						.requestMatchers("/index.html", "/admin.html").permitAll()
+						// Las páginas de error tampoco: un 404 o un 500 no deben convertirse en 401.
+						.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 						.requestMatchers("/assets/**", "/favicon.ico", "/manifest.webmanifest").permitAll()
 						// Necesario antes del login: es lo que materializa la cookie XSRF-TOKEN.
 						.requestMatchers("/api/csrf").permitAll()
