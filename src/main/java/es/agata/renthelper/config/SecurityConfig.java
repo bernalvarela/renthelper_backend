@@ -69,6 +69,14 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.POST, "/api/admin/login", "/api/admin/logout").permitAll()
 						.requestMatchers("/api/admin/**").authenticated()
 						.requestMatchers("/admin/**").permitAll()   // la SPA se sirve; sus datos no
+						// Los datos viven en /api y el actuator expone sólo health: lo demás de ahí
+						// dentro, cerrado.
+						.requestMatchers("/api/**", "/actuator/**").authenticated()
+						// Fuera de /api sólo hay ficheros estáticos, así que un GET a una ruta
+						// desconocida no puede devolver nada privado. Se deja pasar para que acabe en
+						// la página 404 (static/error/404.html) y no en un 401 que el navegador
+						// convierte en un diálogo de usuario y contraseña.
+						.requestMatchers(HttpMethod.GET, "/**").permitAll()
 						.anyRequest().authenticated())
 				.csrf(csrf -> csrf
 						// El formulario público es anónimo y sin sesión: CSRF no aporta nada ahí.

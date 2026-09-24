@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  Página 404 del servidor. Vite la copia tal cual al bundle (public/ -> static/) y Spring Boot la
+  sirve sola a los navegadores que piden una ruta que no existe (static/error/404.html). Las
+  peticiones a /api/ siguen recibiendo el JSON de siempre.
+
+  HTML y CSS en línea, sin JavaScript ni el bundle: la CSP no admite scripts en línea y esta
+  página tiene que funcionar aunque el resto no cargue. Mismo aspecto que el Aviso del formulario.
+-->
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Página no encontrada</title>
+    <style>
+      :root {
+        --fondo: #f8fafc;
+        --titulo: #1e293b;
+        --texto: #475569;
+        --tenue: #94a3b8;
+        --marca: #2f6f5e;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fondo: #020617;
+          --titulo: #f1f5f9;
+          --texto: #94a3b8;
+          --tenue: #64748b;
+          --marca: #7fb8a6;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        background: var(--fondo);
+        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        text-align: center;
+      }
+      main { width: 100%; max-width: 28rem; }
+      .codigo {
+        margin: 0;
+        font-size: 3rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--marca);
+      }
+      h1 {
+        margin: 0.5rem 0 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--titulo);
+      }
+      p { margin: 0.75rem 0 0; color: var(--texto); }
+      .en {
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid color-mix(in srgb, var(--tenue) 30%, transparent);
+      }
+      .en h2 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--titulo);
+      }
+      .en p { font-size: 0.9375rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="codigo" aria-hidden="true">404</p>
+      <h1>Esta página no existe</h1>
+      <p>
+        Si has llegado desde un enlace que te hemos enviado, comprueba que está completo: a veces
+        se corta al copiarlo.
+      </p>
+
+      <section class="en" lang="en">
+        <h2>This page doesn't exist</h2>
+        <p>
+          If you followed a link we sent you, make sure it's complete: links sometimes get cut off
+          when copied.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

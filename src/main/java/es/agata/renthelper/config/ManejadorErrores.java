@@ -2,6 +2,7 @@ package es.agata.renthelper.config;
 
 import es.agata.renthelper.api.ExcepcionNegocio;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.NestedExceptionUtils;
@@ -19,6 +20,7 @@ import org.springframework.web.context.request.async.AsyncRequestNotUsableExcept
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -55,10 +57,20 @@ public class ManejadorErrores {
 		return respuesta(ex.getEstado(), ex.getCodigo(), ex.getMessage());
 	}
 
-	/** Un fichero o una ruta que no existe. Frecuente (bots, enlaces viejos) y nada grave. */
+	/**
+	 * Un fichero o una ruta que no existe. Frecuente (bots, enlaces viejos) y nada grave.
+	 *
+	 * <p>Fuera de /api se delega en el manejo de errores de Spring Boot, que a un navegador le
+	 * sirve la página static/error/404.html y a cualquier otro cliente, JSON.
+	 */
 	@ExceptionHandler(NoResourceFoundException.class)
-	public ResponseEntity<Map<String, Object>> noEncontrado(NoResourceFoundException ex, HttpServletRequest peticion) {
+	public ResponseEntity<Map<String, Object>> noEncontrado(NoResourceFoundException ex, HttpServletRequest peticion,
+	                                                        HttpServletResponse respuesta) throws IOException {
 		log.warn("{} {} -> 404 no existe", peticion.getMethod(), ruta(peticion));
+		if (!peticion.getRequestURI().startsWith("/api/")) {
+			respuesta.sendError(HttpStatus.NOT_FOUND.value());
+			return null;
+		}
 		return respuesta(HttpStatus.NOT_FOUND, "NO_ENCONTRADO", "No existe.");
 	}
 
