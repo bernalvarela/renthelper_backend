@@ -83,21 +83,129 @@ services:
       JAVA_OPTS: "-Xmx384m"
       TZ: Europe/Madrid
     # No published port: the only way in is https://renthelper.duckdns.org through Traefik.
+    #
+    # --- Attack surface, route by route (Traefik v3 label names) -------------------------------
+    #
+    # One router per kind of traffic, each with its own limits. Traefik picks the router with the
+    # highest priority whose rule matches:
+    #
+    #   100 /actuator/**                     blocked from outside (the healthcheck is internal)
+    #    95 POST /api/admin/login            brute-force limit: 3 at once, 1/minute, 10/hour per IP
+    #    90 /admin/**, /api/admin/**         bigger bodies (the panel edits form definitions)
+    #    80 POST .../anuncios/{slug}/candidaturas   new application: the strictest public limit
+    #    70 /api/publico/**                  the form's API
+    #     1 everything else                  pages and static files
+    #
+    # No IP allowlist anywhere. The form is public on purpose: candidates arrive from idealista
+    # with any IP, often from a phone behind the carrier's NAT, where many people share one IP.
+    # The panel is used from the phone and away from home too, so its lock is the password plus
+    # the login limit. The limits are generous per IP: they stop floods and scripts, not people. The app applies
+    # its own, finer limits behind these (FiltroRateLimit: 10 new applications/hour and
+    # 90 requests/minute per IP) and answers them with a readable message.
+    #
+    # All the limits count per client IP as Traefik sees it, so check once that it sees the real
+    # ones. Open https://renthelper.duckdns.org/api/csrf from your phone on 4G and look at the
+    # client address in Traefik's access log (accessLog must be enabled). It must be the phone's
+    # public IP. If every request comes from the same 172.x address, Docker is proxying the
+    # connections: every visitor shares one bucket, and the login limit blocks everyone at once.
     labels:
       com.centurylinklabs.watchtower.enable: "true"
       traefik.enable: "true"
       # Two networks: tell Traefik which one reaches the app.
       traefik.docker.network: "traefik-net"
-      traefik.http.routers.renthelper-https.entrypoints: "websecure"
-      traefik.http.routers.renthelper-https.rule: "Host(`renthelper.duckdns.org`)"
-      traefik.http.routers.renthelper-https.tls: "true"
-      traefik.http.routers.renthelper-https.tls.certresolver: "letsencrypt"
       traefik.http.services.renthelper.loadbalancer.server.port: "8080"
-      # Defence in depth on the public form: the app has its own per-IP limit as well.
-      traefik.http.routers.renthelper-https.middlewares: "renthelper-ratelimit"
-      traefik.http.middlewares.renthelper-ratelimit.ratelimit.average: "60"
-      traefik.http.middlewares.renthelper-ratelimit.ratelimit.burst: "120"
-      traefik.http.middlewares.renthelper-ratelimit.ratelimit.period: "1m"
+
+      # --- Middlewares ---------------------------------------------------------------------
+
+      # Security headers. The app already sends CSP, X-Frame-Options and nosniff; this adds
+      # HSTS and keeps the candidate's token (it is in the URL) out of the Referer header.
+      traefik.http.middlewares.renthelper-cabeceras.headers.stsSeconds: "31536000"
+      traefik.http.middlewares.renthelper-cabeceras.headers.contentTypeNosniff: "true"
+      traefik.http.middlewares.renthelper-cabeceras.headers.frameDeny: "true"
+      traefik.http.middlewares.renthelper-cabeceras.headers.referrerPolicy: "no-referrer"
+      traefik.http.middlewares.renthelper-cabeceras.headers.permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=()"
+      traefik.http.middlewares.renthelper-cabeceras.headers.customResponseHeaders.X-Robots-Tag: "noindex, nofollow"
+
+      # At most 20 requests in flight per IP: slow, piled-up requests cannot tie up the server.
+      # ipstrategy.depth=0 means "the connection's IP": without it, inFlightReq counts per host
+      # name, i.e. one bucket for the whole world.
+      traefik.http.middlewares.renthelper-concurrencia.inflightreq.amount: "20"
+      traefik.http.middlewares.renthelper-concurrencia.inflightreq.sourcecriterion.ipstrategy.depth: "0"
+
+      # Request bodies. The form's answers are a few KB of JSON; the panel edits form and rubric
+      # definitions, which are bigger. Anything above is rejected (413) before reaching the app.
+      traefik.http.middlewares.renthelper-cuerpo-publico.buffering.maxRequestBodyBytes: "131072"
+      traefik.http.middlewares.renthelper-cuerpo-admin.buffering.maxRequestBodyBytes: "2097152"
+
+      # Rate limits per IP (token bucket: "average" per "period", with "burst" in reserve).
+      # Pages and static files: loading the form or the panel is a handful of requests.
+      traefik.http.middlewares.renthelper-limite-general.ratelimit.average: "60"
+      traefik.http.middlewares.renthelper-limite-general.ratelimit.period: "1m"
+      traefik.http.middlewares.renthelper-limite-general.ratelimit.burst: "120"
+      # The form's API: saving each step is one request.
+      traefik.http.middlewares.renthelper-limite-api.ratelimit.average: "90"
+      traefik.http.middlewares.renthelper-limite-api.ratelimit.period: "1m"
+      traefik.http.middlewares.renthelper-limite-api.ratelimit.burst: "30"
+      # New applications: 5 at once, then one every 3 minutes. Looser than the app's own limit
+      # (10/hour), so a real person hits the app's message first; this stops a script.
+      traefik.http.middlewares.renthelper-limite-alta.ratelimit.average: "20"
+      traefik.http.middlewares.renthelper-limite-alta.ratelimit.period: "1h"
+      traefik.http.middlewares.renthelper-limite-alta.ratelimit.burst: "5"
+      # Panel login. The panel is reachable from anywhere (phone, away from home), so the
+      # password is the only lock and guessing it has to be slow. Two buckets on the same route:
+      # 3 attempts at once, then one a minute, and never more than 10 in an hour. That is under
+      # 240 guesses a day per IP, against a long random password.
+      traefik.http.middlewares.renthelper-limite-login.ratelimit.average: "1"
+      traefik.http.middlewares.renthelper-limite-login.ratelimit.period: "1m"
+      traefik.http.middlewares.renthelper-limite-login.ratelimit.burst: "3"
+      traefik.http.middlewares.renthelper-limite-login-hora.ratelimit.average: "10"
+      traefik.http.middlewares.renthelper-limite-login-hora.ratelimit.period: "1h"
+      traefik.http.middlewares.renthelper-limite-login-hora.ratelimit.burst: "10"
+
+      # Nobody: /actuator is only for the healthcheck, which runs inside the container.
+      traefik.http.middlewares.renthelper-nadie.ipallowlist.sourcerange: "127.0.0.1/32"
+
+      # What every route gets.
+      traefik.http.middlewares.renthelper-base.chain.middlewares: "renthelper-cabeceras,renthelper-concurrencia"
+
+      # --- Routers -------------------------------------------------------------------------
+
+      traefik.http.routers.renthelper-actuator.rule: "Host(`renthelper.duckdns.org`) && PathPrefix(`/actuator`)"
+      traefik.http.routers.renthelper-actuator.priority: "100"
+      traefik.http.routers.renthelper-actuator.middlewares: "renthelper-nadie"
+      traefik.http.routers.renthelper-actuator.entrypoints: "websecure"
+      traefik.http.routers.renthelper-actuator.tls.certresolver: "letsencrypt"
+
+      traefik.http.routers.renthelper-login.rule: "Host(`renthelper.duckdns.org`) && Method(`POST`) && Path(`/api/admin/login`)"
+      traefik.http.routers.renthelper-login.priority: "95"
+      traefik.http.routers.renthelper-login.middlewares: "renthelper-limite-login,renthelper-limite-login-hora,renthelper-cuerpo-publico,renthelper-base"
+      traefik.http.routers.renthelper-login.entrypoints: "websecure"
+      traefik.http.routers.renthelper-login.tls.certresolver: "letsencrypt"
+
+      traefik.http.routers.renthelper-admin.rule: "Host(`renthelper.duckdns.org`) && (PathPrefix(`/admin`) || PathPrefix(`/api/admin`))"
+      traefik.http.routers.renthelper-admin.priority: "90"
+      traefik.http.routers.renthelper-admin.middlewares: "renthelper-limite-general,renthelper-cuerpo-admin,renthelper-base"
+      traefik.http.routers.renthelper-admin.entrypoints: "websecure"
+      traefik.http.routers.renthelper-admin.tls.certresolver: "letsencrypt"
+
+      traefik.http.routers.renthelper-alta.rule: "Host(`renthelper.duckdns.org`) && Method(`POST`) && PathRegexp(`^/api/publico/anuncios/[^/]+/candidaturas$`)"
+      traefik.http.routers.renthelper-alta.priority: "80"
+      traefik.http.routers.renthelper-alta.middlewares: "renthelper-limite-alta,renthelper-cuerpo-publico,renthelper-base"
+      traefik.http.routers.renthelper-alta.entrypoints: "websecure"
+      traefik.http.routers.renthelper-alta.tls.certresolver: "letsencrypt"
+
+      traefik.http.routers.renthelper-api.rule: "Host(`renthelper.duckdns.org`) && PathPrefix(`/api/publico`)"
+      traefik.http.routers.renthelper-api.priority: "70"
+      traefik.http.routers.renthelper-api.middlewares: "renthelper-limite-api,renthelper-cuerpo-publico,renthelper-base"
+      traefik.http.routers.renthelper-api.entrypoints: "websecure"
+      traefik.http.routers.renthelper-api.tls.certresolver: "letsencrypt"
+
+      # Pages and static files, plus /api/csrf, which the panel needs before logging in.
+      traefik.http.routers.renthelper-https.rule: "Host(`renthelper.duckdns.org`)"
+      traefik.http.routers.renthelper-https.priority: "1"
+      traefik.http.routers.renthelper-https.middlewares: "renthelper-limite-general,renthelper-cuerpo-publico,renthelper-base"
+      traefik.http.routers.renthelper-https.entrypoints: "websecure"
+      traefik.http.routers.renthelper-https.tls.certresolver: "letsencrypt"
     restart: unless-stopped
     # traefik-net to be reachable by Traefik, boxvault-net to reach the database.
     networks: [traefik-net, boxvault-net]
