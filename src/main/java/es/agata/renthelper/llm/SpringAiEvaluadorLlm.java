@@ -91,7 +91,12 @@ public class SpringAiEvaluadorLlm implements EvaluadorLlm {
 			return new ResultadoLlm(ajuste.acotado(ajusteMaximo), proveedor.getNombre(), proveedor.getModelo(),
 					entrada, salida, latencia, texto, null);
 
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | LinkageError e) {
+			// LinkageError también: en la imagen nativa una reflexión sin registrar lanza
+			// MissingReflectionRegistrationError, que es un Error y no una excepción. Sin
+			// capturarlo aquí atravesaba la transacción del outbox, la revertía entera y el
+			// mensaje seguía en cola sin contar el intento: una llamada de pago al proveedor
+			// cada quince segundos, sin fin. Aquí se queda en una evaluación fallida más.
 			int latencia = (int) (System.currentTimeMillis() - inicio);
 			String detalle = ErroresLlm.mensajeCompleto(e);
 
@@ -135,7 +140,7 @@ public class SpringAiEvaluadorLlm implements EvaluadorLlm {
 			log.info("Prueba de {} ({}) correcta en {} ms", proveedor.getNombre(),
 					proveedor.getModelo(), latencia);
 			return new ResultadoPrueba(true, texto == null ? "" : texto.strip(), latencia);
-		} catch (RuntimeException e) {
+		} catch (RuntimeException | LinkageError e) {
 			int latencia = (int) (System.currentTimeMillis() - inicio);
 			String detalle = ErroresLlm.mensajeCompleto(e);
 			log.warn("Prueba de {} ({}) fallida tras {} ms: {}", proveedor.getNombre(),

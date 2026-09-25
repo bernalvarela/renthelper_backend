@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface RepositorioOutbox extends JpaRepository<MensajeOutbox, UUID> {
@@ -39,6 +40,18 @@ public interface RepositorioOutbox extends JpaRepository<MensajeOutbox, UUID> {
 	}
 
 	long countByEstado(MensajeOutbox.Estado estado);
+
+	/**
+	 * La operación, bloqueada. El poller tiene sus mensajes bloqueados mientras los procesa
+	 * —llamada al LLM incluida—, así que cancelar espera a que termine y ve el estado real, en
+	 * vez de marcar como cancelado algo que acaba de completarse.
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select m from MensajeOutbox m where m.id = :id")
+	Optional<MensajeOutbox> bloquear(@Param("id") UUID id);
+
+	/** Todo lo que sigue en cola, por antiguo que sea: lo reciente no basta para poder anularlo. */
+	List<MensajeOutbox> findByEstadoOrderByProximaEjecucionAsc(MensajeOutbox.Estado estado);
 
 	/**
 	 * Las evaluaciones en cola de esas candidaturas, para que el panel marque qué filas se están

@@ -47,6 +47,13 @@ public class ControladorAdmin {
 		return outbox.actividad();
 	}
 
+	/** Anular una operación en cola que no va a salir, en vez de esperar a que agote sus reintentos. */
+	@PostMapping("/actividad/{id}/cancelar")
+	public Map<String, Object> cancelarOperacion(@PathVariable UUID id) {
+		outbox.cancelar(id);
+		return Map.of("cancelada", true);
+	}
+
 	@GetMapping("/sesion")
 	public DtosAdmin.Sesion sesion(@AuthenticationPrincipal UsuarioAutenticado usuario) {
 		return new DtosAdmin.Sesion(usuario.email(), usuario.rol());
@@ -118,6 +125,12 @@ public class ControladorAdmin {
 	                                               @RequestParam(required = false) UUID proveedorId) {
 		servicio.reevaluarCandidatura(id, proveedorId);
 		return Map.of("encolada", true);
+	}
+
+	/** Anular las evaluaciones en cola de una candidatura, desde su fila. */
+	@PostMapping("/candidaturas/{id}/cancelar-evaluacion")
+	public Map<String, Object> cancelarEvaluacion(@PathVariable UUID id) {
+		return Map.of("canceladas", outbox.cancelarEvaluaciones(id));
 	}
 
 	/** Repuntuar en lote tras cambiar la rúbrica. El histórico anterior se conserva. */

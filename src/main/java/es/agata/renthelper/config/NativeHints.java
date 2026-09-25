@@ -11,6 +11,8 @@ import org.springframework.aot.hint.RuntimeHints;
 import org.springframework.aot.hint.RuntimeHintsRegistrar;
 import org.springframework.util.ClassUtils;
 
+import java.util.List;
+
 /**
  * Lo que la imagen nativa de GraalVM necesita y Spring no deduce por su cuenta.
  *
@@ -36,6 +38,19 @@ public class NativeHints implements RuntimeHintsRegistrar {
 		// levantándose) lo instancia por reflexión, y el MissingReflectionRegistrationError
 		// taparía el error de verdad.
 		hints.reflection().registerType(PostgreSQLDialect.class, MemberCategory.INVOKE_DECLARED_CONSTRUCTORS);
+
+		// Los valores JSON sueltos del SDK de OpenAI. Cuando el proveedor devuelve campos que el SDK
+		// no conoce —Groq manda `x_groq` y compañía—, Spring AI los copia a los metadatos de la
+		// respuesta pasándolos por SU Jackson (el 3), que lee estos objetos como beans: getters por
+		// reflexión. Los metadatos que trae el SDK sólo cubren su propio Jackson 2, así que sin
+		// esto cada respuesta de Groq reventaba con un MissingReflectionRegistrationError sobre
+		// JsonField.isMissing().
+		for (String tipo : List.of("JsonField", "JsonValue", "JsonMissing", "JsonNull", "JsonBoolean",
+				"JsonNumber", "JsonString", "JsonArray", "JsonObject", "KnownValue")) {
+			hints.reflection().registerTypeIfPresent(classLoader, "com.openai.core." + tipo,
+					MemberCategory.INVOKE_PUBLIC_METHODS, MemberCategory.INVOKE_DECLARED_METHODS,
+					MemberCategory.ACCESS_DECLARED_FIELDS);
+		}
 
 		BindingReflectionHintsRegistrar registrar = new BindingReflectionHintsRegistrar();
 		registrar.registerReflectionHints(hints.reflection(),

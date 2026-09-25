@@ -35,7 +35,9 @@ public class MensajeOutbox {
 	public enum Estado {
 		PENDIENTE,
 		COMPLETADO,
-		FALLIDO
+		FALLIDO,
+		/** Anulada a mano desde el panel antes de procesarse. */
+		CANCELADO
 	}
 
 	@Id
@@ -100,6 +102,18 @@ public class MensajeOutbox {
 		this.estado = Estado.COMPLETADO;
 		this.procesadoEn = Instant.now();
 		this.ultimoError = null;
+	}
+
+	/**
+	 * Anulada desde el panel: el poller ya no la toma. Para lo que no va a salir nunca, como una
+	 * evaluación pedida a un modelo sin cuota que se aplazaría cada hora durante un día.
+	 */
+	public void cancelar() {
+		if (this.estado != Estado.PENDIENTE) {
+			throw new IllegalStateException("Sólo se cancela lo que está en cola, y ésta está " + this.estado);
+		}
+		this.estado = Estado.CANCELADO;
+		this.procesadoEn = Instant.now();
 	}
 
 	/**

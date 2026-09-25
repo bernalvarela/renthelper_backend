@@ -88,7 +88,10 @@ public class ProcesadorOutbox {
 							mensaje.getReferenciaId(), config.aplazamientoMinutos(),
 							mensaje.getAplazamientos(), config.maxAplazamientos(), e.getMessage());
 
-				} catch (RuntimeException e) {
+				} catch (RuntimeException | LinkageError e) {
+					// LinkageError: en la imagen nativa, una reflexión sin registrar es un Error y
+					// no una excepción. Sin capturarlo aquí, el mensaje ni contaba el intento ni
+					// esperaba el backoff: se volvía a tomar en la pasada siguiente, para siempre.
 					mensaje.fallar(e.getMessage(), config.maxIntentos(), config.backoffBaseSegundos());
 					if (mensaje.getEstado() == MensajeOutbox.Estado.FALLIDO) {
 						log.error("Outbox: {} para {} agotó los {} intentos y queda FALLIDO",

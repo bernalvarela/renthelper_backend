@@ -139,7 +139,9 @@ public final class DtosAdmin {
 			Instant creadoEn,
 			Instant procesadoEn,
 			Instant proximaEjecucion,
-			String ultimoError) {
+			String ultimoError,
+			/** El modelo concreto que se pidió («Repuntuar con…»). Null = el primero de la cadena. */
+			String modelo) {
 	}
 
 	public record FichaCandidatura(
