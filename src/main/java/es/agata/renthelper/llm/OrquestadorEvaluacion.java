@@ -71,6 +71,7 @@ public class OrquestadorEvaluacion {
 	private final MotorDeterminista motor;
 	private final EvaluadorLlm evaluador;
 	private final PropiedadesRentHelper propiedades;
+	private final ProgresoEvaluaciones progreso;
 
 	public OrquestadorEvaluacion(RepositorioCandidatura repoCandidaturas, RepositorioAnuncio repoAnuncios,
 	                             RepositorioEsquemaFormulario repoEsquemas, RepositorioRubrica repoRubricas,
@@ -78,7 +79,8 @@ public class OrquestadorEvaluacion {
 	                             RepositorioProveedorLlm repoProveedores, RepositorioAjustes repoAjustes,
 	                             BonificacionFiscal bonificacionFiscal,
 	                             MotorDeterminista motor, EvaluadorLlm evaluador,
-	                             PropiedadesRentHelper propiedades) {
+	                             PropiedadesRentHelper propiedades, ProgresoEvaluaciones progreso) {
+		this.progreso = progreso;
 		this.repoCandidaturas = repoCandidaturas;
 		this.repoAnuncios = repoAnuncios;
 		this.repoEsquemas = repoEsquemas;
@@ -115,6 +117,16 @@ public class OrquestadorEvaluacion {
 	 */
 	@Transactional
 	public Evaluacion evaluar(UUID candidaturaId, boolean forzarLlm, UUID proveedorId) {
+		// Cada paso queda anotado para la fila del panel; al acabar, bien o mal, se borra.
+		progreso.empezar(candidaturaId);
+		try {
+			return evaluarAnotando(candidaturaId, proveedorId);
+		} finally {
+			progreso.terminar(candidaturaId);
+		}
+	}
+
+	private Evaluacion evaluarAnotando(UUID candidaturaId, UUID proveedorId) {
 		Candidatura candidatura = repoCandidaturas.findById(candidaturaId)
 				.orElseThrow(() -> ExcepcionNegocio.noEncontrado("Candidatura inexistente"));
 		Anuncio anuncio = repoAnuncios.findById(candidatura.getAnuncioId())
@@ -128,6 +140,7 @@ public class OrquestadorEvaluacion {
 				candidatura.getId(), candidatura.getNombre(), anuncio.getSlug(), rubrica.getVersion(),
 				candidatura.isSintetica());
 
+		progreso.paso("Calculando la puntuación de reglas");
 		ResultadoDeterminista determinista = motor.puntuar(rubrica.getDefinicion(), esquema.getDefinicion(),
 				candidatura.getRespuestas(), ContextoAnuncio.de(anuncio));
 
@@ -166,6 +179,7 @@ public class OrquestadorEvaluacion {
 				? elegibles(candidatura, true).elegibles()
 				: List.<ProveedorLlm>of()) {
 			log.info("Evaluación en sombra con {} para comparar modelos", proveedor.getNombre());
+			progreso.paso("Evaluación de comparación: llamando a " + describir(proveedor));
 			ResultadoLlm resultado = evaluador.evaluar(solicitud, proveedor);
 			registrarConsumo(proveedor.getNombre(), resultado.correcto());
 			repoEvaluaciones.save(construir(candidatura, RolEvaluacion.SOMBRA, rubrica, determinista, resultado));
@@ -174,6 +188,7 @@ public class OrquestadorEvaluacion {
 		// Sólo si este intento manda de verdad. Cuando falla y ya había una valoración buena,
 		// `soloReglas` lo degrada a SOMBRA y la candidatura conserva su nota anterior hasta que
 		// un reintento salga bien; pisarla aquí dejaría la puntuación sin el ajuste del modelo.
+		progreso.paso("Guardando la evaluación");
 		if (principal.getRol() == RolEvaluacion.PRINCIPAL) {
 			candidatura.aplicarEvaluacion(principal.getPuntuacionTotal(), determinista.noCumpleMinimos(),
 					determinista.motivosMinimos());
@@ -191,9 +206,15 @@ public class OrquestadorEvaluacion {
 	                                    ResultadoDeterminista determinista, SolicitudEvaluacion solicitud,
 	                                    Eleccion eleccion) {
 		String ultimoError = null;
+		ProveedorLlm anterior = null;
 
 		for (ProveedorLlm proveedor : eleccion.elegibles()) {
 			log.info("Pidiendo evaluación a {} (modelo {})", proveedor.getNombre(), proveedor.getModelo());
+			// Si es el segundo de la cadena, que se sepa por qué: el anterior falló.
+			progreso.paso(anterior == null
+					? "Llamando a " + describir(proveedor)
+					: anterior.getNombre() + " falló; probando con " + describir(proveedor));
+			anterior = proveedor;
 			ResultadoLlm resultado = evaluador.evaluar(solicitud, proveedor);
 			registrarConsumo(proveedor.getNombre(), resultado.correcto());
 
@@ -255,6 +276,13 @@ public class OrquestadorEvaluacion {
 		return hayValoracionPrevia ? evaluacion : repoEvaluaciones.save(evaluacion);
 	}
 
+
+	/** «GROQ · openai/gpt-oss-120b»: el proveedor y el modelo, que es lo que quieres saber. */
+	static String describir(ProveedorLlm proveedor) {
+		return proveedor.getModelo() == null || proveedor.getModelo().isBlank()
+				? proveedor.getNombre()
+				: proveedor.getNombre() + " · " + proveedor.getModelo();
+	}
 
 	/** Proveedores utilizables y, si no hay, por qué se descartó cada uno. */
 	private record Eleccion(List<ProveedorLlm> elegibles, List<String> motivosDescarte) {

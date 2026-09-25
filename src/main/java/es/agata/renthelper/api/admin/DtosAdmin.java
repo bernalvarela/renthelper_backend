@@ -91,7 +91,11 @@ public final class DtosAdmin {
 			 * Hay una evaluación en cola: el panel pone un indicador en la fila. Es cuándo está
 			 * programada; si es más tarde que ahora, está aplazada esperando cuota. Null si no hay.
 			 */
-			Instant evaluacionProgramada) {
+			Instant evaluacionProgramada,
+			/** Qué está haciendo ahora la evaluación en curso («Llamando a GROQ · …»). Null si no hay. */
+			String pasoEvaluacion,
+			/** Desde cuándo está en ese paso, para enseñar cuánto lleva esperando al modelo. */
+			Instant pasoDesde) {
 	}
 
 	public record EvaluacionDto(

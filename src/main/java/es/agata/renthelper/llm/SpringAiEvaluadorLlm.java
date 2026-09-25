@@ -30,9 +30,11 @@ public class SpringAiEvaluadorLlm implements EvaluadorLlm {
 	private final FabricaModelos fabrica;
 	private final ConstructorPrompt constructorPrompt;
 	private final int ajusteMaximoGlobal;
+	private final ProgresoEvaluaciones progreso;
 
 	public SpringAiEvaluadorLlm(FabricaModelos fabrica, ConstructorPrompt constructorPrompt,
-	                            PropiedadesRentHelper propiedades) {
+	                            PropiedadesRentHelper propiedades, ProgresoEvaluaciones progreso) {
+		this.progreso = progreso;
 		this.fabrica = fabrica;
 		this.constructorPrompt = constructorPrompt;
 		this.ajusteMaximoGlobal = propiedades.llm().ajusteMaximo();
@@ -78,6 +80,7 @@ public class SpringAiEvaluadorLlm implements EvaluadorLlm {
 			ChatResponse respuesta = peticion(modelo, proveedor)
 					.system(sistema).user(usuario).call().chatResponse();
 			texto = textoDe(respuesta);
+			progreso.paso("Leyendo la respuesta de " + OrquestadorEvaluacion.describir(proveedor));
 
 			AjusteEvaluacion ajuste = convertirConReintento(modelo, proveedor, conversor, sistema, usuario, texto);
 			int latencia = (int) (System.currentTimeMillis() - inicio);
@@ -190,6 +193,11 @@ public class SpringAiEvaluadorLlm implements EvaluadorLlm {
 				: usuario + "\n\nTu respuesta anterior no era JSON válido:\n" + texto
 						+ "\n\nDevuelve SÓLO el objeto JSON, sin texto alrededor ni bloques de código.";
 
+		progreso.paso(cortada
+				? "La respuesta de " + OrquestadorEvaluacion.describir(proveedor)
+						+ " se cortó; pidiéndola más breve"
+				: "La respuesta de " + OrquestadorEvaluacion.describir(proveedor)
+						+ " no era JSON válido; segundo intento");
 		String segundo = textoDe(peticion(modelo, proveedor)
 				.system(sistema).user(reparacion).call().chatResponse());
 		AjusteEvaluacion ajuste = conversor.convert(limpiar(segundo));

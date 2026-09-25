@@ -16,6 +16,7 @@ import es.agata.renthelper.dominio.RolEvaluacion;
 import es.agata.renthelper.dominio.Rubrica;
 import es.agata.renthelper.formularios.ValidadorEsquema;
 import es.agata.renthelper.formularios.modelo.Paso;
+import es.agata.renthelper.llm.ProgresoEvaluaciones;
 import es.agata.renthelper.outbox.ServicioOutbox;
 import es.agata.renthelper.puntuacion.ValidadorRubrica;
 import es.agata.renthelper.repositorio.RepositorioAnuncio;
@@ -54,6 +55,7 @@ public class ServicioAdmin {
 	private final ValidadorEsquema validadorEsquema;
 	private final ValidadorRubrica validadorRubrica;
 	private final ServicioOutbox outbox;
+	private final ProgresoEvaluaciones progreso;
 	private final String urlPublica;
 
 	public ServicioAdmin(RepositorioAnuncio repoAnuncios, RepositorioCandidatura repoCandidaturas,
@@ -62,7 +64,8 @@ public class ServicioAdmin {
 	                     RepositorioComentario repoComentarios, RepositorioAjustes repoAjustes,
 	                     BonificacionFiscal bonificacionFiscal,
 	                     ValidadorEsquema validadorEsquema, ValidadorRubrica validadorRubrica,
-	                     ServicioOutbox outbox, PropiedadesRentHelper propiedades) {
+	                     ServicioOutbox outbox, ProgresoEvaluaciones progreso, PropiedadesRentHelper propiedades) {
+		this.progreso = progreso;
 		this.repoAnuncios = repoAnuncios;
 		this.repoCandidaturas = repoCandidaturas;
 		this.repoEvaluaciones = repoEvaluaciones;
@@ -212,10 +215,11 @@ public class ServicioAdmin {
 		Ajustes ajustes = repoAjustes.findFirstBy().orElse(null);
 		List<Candidatura> candidaturas = repoCandidaturas.paraTriaje(anuncioId, incluirBorradores);
 		// Lo mismo con la cola: una consulta para todas las filas, no una por fila.
-		Map<UUID, java.time.Instant> enCola =
-				outbox.evaluacionesEnCola(candidaturas.stream().map(Candidatura::getId).toList());
+		List<UUID> ids = candidaturas.stream().map(Candidatura::getId).toList();
+		Map<UUID, java.time.Instant> enCola = outbox.evaluacionesEnCola(ids);
+		Map<UUID, ProgresoEvaluaciones.Paso> pasos = progreso.de(ids);
 		return candidaturas.stream()
-				.map(c -> aFila(c, ajustes, enCola.get(c.getId())))
+				.map(c -> aFila(c, ajustes, enCola.get(c.getId()), pasos.get(c.getId())))
 				.toList();
 	}
 
@@ -578,12 +582,15 @@ public class ServicioAdmin {
 	}
 
 	private DtosAdmin.FilaCandidatura aFila(Candidatura candidatura) {
+		List<UUID> id = List.of(candidatura.getId());
 		return aFila(candidatura, repoAjustes.findFirstBy().orElse(null),
-				outbox.evaluacionesEnCola(List.of(candidatura.getId())).get(candidatura.getId()));
+				outbox.evaluacionesEnCola(id).get(candidatura.getId()),
+				progreso.de(id).get(candidatura.getId()));
 	}
 
 	private DtosAdmin.FilaCandidatura aFila(Candidatura candidatura, Ajustes ajustes,
-	                                        java.time.Instant evaluacionProgramada) {
+	                                        java.time.Instant evaluacionProgramada,
+	                                        ProgresoEvaluaciones.Paso paso) {
 		BonificacionFiscal.Resultado fiscal =
 				bonificacionFiscal.evaluar(ajustes, candidatura.getRespuestas());
 		Optional<Evaluacion> principal = repoEvaluaciones
@@ -608,7 +615,9 @@ public class ServicioAdmin {
 				fiscal.resumen(),
 				principal.map(Evaluacion::getError).orElse(null),
 				candidatura.getTelefonoNormalizado(), candidatura.getEmail(),
-				evaluacionProgramada);
+				evaluacionProgramada,
+				paso == null ? null : paso.texto(),
+				paso == null ? null : paso.desde());
 	}
 
 	private DtosAdmin.EvaluacionDto aDto(Evaluacion e) {
