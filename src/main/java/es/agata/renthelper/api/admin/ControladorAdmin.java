@@ -1,6 +1,7 @@
 package es.agata.renthelper.api.admin;
 
 import es.agata.renthelper.config.UsuarioAutenticado;
+import es.agata.renthelper.llm.ServicioInformeComparativo;
 import es.agata.renthelper.outbox.ServicioOutbox;
 import es.agata.renthelper.servicio.ServicioAdmin;
 import es.agata.renthelper.llm.ResultadoPrueba;
@@ -32,9 +33,12 @@ public class ControladorAdmin {
 	private final ServicioComparacion comparacion;
 	private final ServicioOutbox outbox;
 	private final ServicioAjustes servicioAjustes;
+	private final ServicioInformeComparativo informes;
 
 	public ControladorAdmin(ServicioAdmin servicio, ServicioComparacion comparacion,
-	                        ServicioOutbox outbox, ServicioAjustes servicioAjustes) {
+	                        ServicioOutbox outbox, ServicioAjustes servicioAjustes,
+	                        ServicioInformeComparativo informes) {
+		this.informes = informes;
 		this.servicio = servicio;
 		this.comparacion = comparacion;
 		this.outbox = outbox;
@@ -142,6 +146,19 @@ public class ControladorAdmin {
 	@GetMapping("/anuncios/{id}/embudo")
 	public List<DtosAdmin.PasoEmbudo> embudo(@PathVariable UUID id) {
 		return servicio.embudo(id);
+	}
+
+	/** Los finalistas que se pueden comparar, el máximo y el último informe comparativo. */
+	@GetMapping("/anuncios/{id}/informe-comparativo")
+	public DtosAdmin.EstadoComparativa informeComparativo(@PathVariable UUID id) {
+		return informes.estado(id);
+	}
+
+	/** Una llamada al modelo con esos finalistas. Tarda lo que tarde el modelo (hasta un minuto). */
+	@PostMapping("/anuncios/{id}/informe-comparativo")
+	public DtosAdmin.InformeComparativoDto generarInformeComparativo(@PathVariable UUID id,
+	                                                                @RequestBody DtosAdmin.PeticionComparativa peticion) {
+		return informes.generar(id, peticion.candidaturaIds());
 	}
 
 	@GetMapping("/anuncios/{id}/comparacion")

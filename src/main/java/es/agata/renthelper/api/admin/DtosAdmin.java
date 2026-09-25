@@ -47,7 +47,13 @@ public final class DtosAdmin {
 			UUID formSchemaId,
 			UUID rubricaId,
 			Boolean aceptandoCandidaturas,
-			Integer umbralAlerta) {
+			Integer umbralAlerta,
+			/**
+			 * El enlace público, {@code /c/<slug>}. SÓLO al crear: vacío = uno corto aleatorio, y
+			 * se normaliza («Piso Centro» → «piso-centro»). Al editar se ignora: una vez creado es
+			 * fijo, porque ya puede estar en idealista o en manos de algún candidato.
+			 */
+			String slug) {
 	}
 
 	/** Una fila de la tabla de triaje. Lleva ya lo que se necesita para decidir sin abrir la ficha. */
@@ -130,6 +136,45 @@ public final class DtosAdmin {
 	 * por cuota» se ven exactamente igual desde el panel.
 	 */
 	public record Actividad(long pendientes, long fallidas, List<OperacionOutbox> recientes) {
+	}
+
+	// --- Informe comparativo de finalistas -----------------------------------------------
+
+	/** Lo que necesita el panel: quién se puede comparar, hasta cuántos, y el último informe. */
+	public record EstadoComparativa(int maxFinalistas, List<FinalistaElegible> finalistas,
+	                                InformeComparativoDto ultimo) {
+	}
+
+	/** Una candidatura citada o seleccionada, candidata a entrar en la comparación. */
+	public record FinalistaElegible(UUID id, String nombre, Integer puntuacion, String estado) {
+	}
+
+	public record PeticionComparativa(List<UUID> candidaturaIds) {
+	}
+
+	public record InformeComparativoDto(
+			UUID id,
+			Instant creadoEn,
+			String proveedor,
+			String modelo,
+			String promptVersion,
+			Integer latenciaMs,
+			/** Alguna ya no es finalista, se borró o cambió después: conviene regenerarlo. */
+			boolean desactualizado,
+			String panorama,
+			List<FinalistaInforme> finalistas,
+			String riesgos,
+			List<String> preguntas,
+			/** Opinión del modelo: no toca las puntuaciones. */
+			List<PosicionInforme> ordenSugerido) {
+	}
+
+	/** Un finalista del informe, ya con su nombre: al modelo sólo le llegó la letra. */
+	public record FinalistaInforme(String etiqueta, UUID candidaturaId, String nombre, Integer puntuacion,
+	                               String estado, String datosClave, String puntoFuerte, String puntoDebil) {
+	}
+
+	public record PosicionInforme(String etiqueta, UUID candidaturaId, String nombre, String motivo) {
 	}
 
 	public record OperacionOutbox(

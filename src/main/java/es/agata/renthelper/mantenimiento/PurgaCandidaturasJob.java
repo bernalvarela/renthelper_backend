@@ -3,6 +3,7 @@ package es.agata.renthelper.mantenimiento;
 import es.agata.renthelper.config.ContextoTenant;
 import es.agata.renthelper.config.PropiedadesRentHelper;
 import es.agata.renthelper.dominio.Candidatura;
+import es.agata.renthelper.llm.ServicioInformeComparativo;
 import es.agata.renthelper.repositorio.RepositorioCandidatura;
 import es.agata.renthelper.repositorio.RepositorioComentario;
 import es.agata.renthelper.repositorio.RepositorioEvaluacion;
@@ -36,10 +37,12 @@ public class PurgaCandidaturasJob {
 	private final RepositorioEventoFormulario repoEventos;
 	private final RepositorioComentario repoComentarios;
 	private final PropiedadesRentHelper.Retencion retencion;
+	private final ServicioInformeComparativo informes;
 
 	public PurgaCandidaturasJob(RepositorioCandidatura repoCandidaturas, RepositorioEvaluacion repoEvaluaciones,
 	                            RepositorioEventoFormulario repoEventos, RepositorioComentario repoComentarios,
-	                            PropiedadesRentHelper propiedades) {
+	                            ServicioInformeComparativo informes, PropiedadesRentHelper propiedades) {
+		this.informes = informes;
 		this.repoCandidaturas = repoCandidaturas;
 		this.repoEvaluaciones = repoEvaluaciones;
 		this.repoEventos = repoEventos;
@@ -63,6 +66,8 @@ public class PurgaCandidaturasJob {
 				// Tus apuntes también: son texto libre sobre una persona identificada, y dejarlos
 				// atrás convertiría la purga en un borrado a medias.
 				repoComentarios.deleteByCandidaturaId(candidatura.getId());
+				// Y los informes comparativos donde sale: hablan de ella con sus cifras.
+				informes.olvidarCandidatura(candidatura.getAnuncioId(), candidatura.getId());
 			}
 			repoCandidaturas.deleteAll(caducadas);
 			log.info("Purgadas {} candidaturas por plazo de conservación ({} meses)", caducadas.size(),

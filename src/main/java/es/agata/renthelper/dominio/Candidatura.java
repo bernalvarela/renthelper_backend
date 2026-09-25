@@ -187,6 +187,17 @@ public class Candidatura {
 	}
 
 	/**
+	 * Deshace la decisión de triaje: vuelve a «pendiente». Evaluada si ya tiene nota, enviada si
+	 * todavía no. Para el cambio de estado desde la tabla, donde una decisión se corrige igual
+	 * que se toma.
+	 */
+	public void deshacerTriaje() {
+		this.estado = this.puntuacion != null ? EstadoCandidatura.EVALUADA : EstadoCandidatura.ENVIADA;
+		this.revisadaEn = null;
+		this.actualizadaEn = Instant.now();
+	}
+
+	/**
 	 * Tu nota, sin tocar el estado.
 	 *
 	 * <p>Acepta null para poder quitarla: el selector del panel tiene la opción «sin nota», y sin

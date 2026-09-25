@@ -253,6 +253,91 @@ public class ConstructorPrompt {
 
 
 	/**
+	 * Instrucciones para comparar a los finalistas en una sola llamada.
+	 *
+	 * <p>Las reglas legales son las mismas que las de la evaluación individual, más una propia de
+	 * comparar: el orden en que llegan es aleatorio, para que no pese. Los modelos tienden a
+	 * favorecer al primero o al último que leen, y aquí eso sería decidir por sorteo.
+	 */
+	public String sistemaComparativa(int finalistas) {
+		return """
+				Ayudas a un propietario a decidir entre los %d finalistas de su anuncio de alquiler. Ya
+				los ha filtrado: todos son razonables y ahora duda entre ellos. Tu trabajo es
+				compararlos entre sí, no valorar a cada uno por separado (eso ya está hecho).
+
+				Cada candidatura viene con una letra (A, B, C...) y sin nombre. Las letras y el orden
+				en que aparecen son ALEATORIOS y no significan nada: no dejes que el orden influya.
+
+				Reglas que no puedes saltarte:
+				- Compara SÓLO por lo que importa para el alquiler: solvencia (ingresos frente a
+				  renta y estabilidad de los contratos), fechas de entrada frente a la disponibilidad,
+				  duración prevista, ocupación frente a habitaciones, mascotas y tabaco, referencias,
+				  y la coherencia y calidad de las respuestas.
+				- NO compares, valores ni menciones origen, nacionalidad, etnia, religión, orientación
+				  sexual, identidad de género, discapacidad, estado civil, si tienen hijos ni la edad.
+				  Si algo de eso aparece en el texto libre, ignóralo por completo. Discriminar por
+				  esos motivos en el acceso a la vivienda es ilegal en España, y comparar personas
+				  directamente es donde más fácil es hacerlo sin darse cuenta.
+				- Los datos son autodeclarados. Si algo es dudoso, conviértelo en una pregunta, no en
+				  un castigo.
+				- Cuando menciones un dato, DI SU VALOR: «2.800 €/mes para 750 € de renta», no
+				  «ingresos holgados». No inventes ni redondees cifras.
+				- Fechas en formato dd/MM/aaaa, como te llegan.
+				- Responde SIEMPRE en castellano. Texto plano, sin Markdown: se muestra tal cual.
+				- Refiérete a cada una SIEMPRE por su letra: «A», «B»...
+
+				Sobre los campos:
+				- `panorama`: dos o tres frases sobre el grupo. En qué se parecen y qué los separa de
+				  verdad.
+				- `finalistas`: una entrada por letra, sin saltarte ninguna. `datosClave` es una
+				  línea con lo esencial (ingresos frente a renta, fecha de entrada, duración,
+				  personas). `puntoFuerte` y `puntoDebil`, frente a LOS DEMÁS finalistas, no en
+				  abstracto: «la única que entra antes de que el piso quede libre».
+				- `riesgos`: quién arriesga más y en qué, comparados entre sí. Un párrafo corto.
+				- `preguntas`: preguntas concretas para la llamada o la visita que DESEMPATARÍAN.
+				  Empieza cada una por la letra a la que va dirigida: «C: ¿...?».
+				- `ordenSugerido`: todas las letras, de la que más te convence a la que menos, con
+				  el motivo en una frase. Es una opinión y así se presentará: el propietario decide.
+				""".formatted(finalistas);
+	}
+
+	/**
+	 * Los datos de los finalistas, cada uno bajo su letra. Sin nombre, teléfono ni correo, y sin
+	 * la bonificación fiscal: sale de la edad, y comparar personas no puede tocar la edad.
+	 *
+	 * @param finalistas letra → solicitud, ya barajados; se presentan en ese orden.
+	 */
+	public String usuarioComparativa(Map<String, SolicitudEvaluacion> finalistas) {
+		SolicitudEvaluacion cualquiera = finalistas.values().iterator().next();
+		StringBuilder sb = new StringBuilder();
+
+		sb.append("## Vivienda\n")
+				.append("- Renta mensual: ").append(cualquiera.renta()).append(" €\n");
+		if (cualquiera.habitaciones() != null) {
+			sb.append("- Habitaciones: ").append(cualquiera.habitaciones()).append('\n');
+		}
+		if (cualquiera.disponibleDesde() != null) {
+			sb.append("- Disponible desde: ").append(FECHA_ES.format(cualquiera.disponibleDesde())).append('\n');
+		}
+
+		finalistas.forEach((letra, solicitud) -> {
+			sb.append("\n\n# Candidatura ").append(letra).append('\n');
+			sb.append("- Puntuación de reglas: ").append(solicitud.determinista().puntuacion()).append("/100\n");
+			for (CriterioPuntuado criterio : paraElPrompt(solicitud.determinista().desglose())) {
+				if (criterio.detalle() != null && !criterio.detalle().isBlank()) {
+					sb.append("- ").append(criterio.etiqueta()).append(": ").append(criterio.detalle()).append('\n');
+				}
+			}
+			if (solicitud.determinista().noCumpleMinimos()) {
+				sb.append("- Avisos de mínimos: ")
+						.append(String.join("; ", solicitud.determinista().motivosMinimos())).append('\n');
+			}
+			sb.append(respuestasSeudonimizadas(solicitud));
+		});
+		return sb.toString();
+	}
+
+	/**
 	 * Qué criterios del desglose se le pasan al modelo.
 	 *
 	 * <p>Dos cosas, y en este orden:

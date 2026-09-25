@@ -16,7 +16,31 @@ public record PropiedadesRentHelper(
 		RateLimit rateLimit,
 		Retencion retencion,
 		Outbox outbox,
-		Llm llm) {
+		Llm llm,
+		Comparativa comparativa) {
+
+	/**
+	 * El informe que compara a los finalistas de un anuncio en una sola llamada al modelo.
+	 *
+	 * @param maxFinalistas cuántos como mucho. Es para decidir entre los últimos, no para
+	 *                      ordenar a todos: con veinte el modelo se fija en unos pocos e ignora el
+	 *                      resto, y para ordenar a todos ya está la puntuación individual.
+	 * @param maxTokensSalida techo de salida propio. Ocho finalistas no caben en el de la
+	 *                        evaluación individual, y en los modelos de razonamiento el
+	 *                        pensamiento cuenta como salida.
+	 */
+	public record Comparativa(int maxFinalistas, int maxTokensSalida) {
+
+		public Comparativa {
+			maxFinalistas = maxFinalistas <= 1 ? 8 : maxFinalistas;
+			maxTokensSalida = maxTokensSalida <= 0 ? 8000 : maxTokensSalida;
+		}
+	}
+
+	/** Sin bloque en el yml el record llega a null: los valores por defecto de arriba. */
+	public Comparativa comparativa() {
+		return comparativa == null ? new Comparativa(0, 0) : comparativa;
+	}
 
 	/**
 	 * En producción se configura {@code passwordHash} (BCrypt) para no tener la contraseña en

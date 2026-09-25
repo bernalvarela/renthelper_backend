@@ -2,6 +2,7 @@ package es.agata.renthelper.config;
 
 import es.agata.renthelper.formularios.modelo.DefinicionFormulario;
 import es.agata.renthelper.llm.AjusteEvaluacion;
+import es.agata.renthelper.llm.InformeComparativoLlm;
 import es.agata.renthelper.puntuacion.modelo.CriterioPuntuado;
 import es.agata.renthelper.puntuacion.modelo.DefinicionRubrica;
 import org.hibernate.dialect.PostgreSQLDialect;
@@ -62,6 +63,8 @@ public class NativeHints implements RuntimeHintsRegistrar {
 				// La salida estructurada del LLM: BeanOutputConverter genera el esquema JSON y
 				// parsea la respuesta por reflexión.
 				AjusteEvaluacion.class,
+				// El informe que compara finalistas: lo mismo, y además se guarda como jsonb.
+				InformeComparativoLlm.class,
 				// Las candidaturas sintéticas que lee SembradorDatos. Es un record privado, así
 				// que va por nombre.
 				ClassUtils.resolveClassName(

@@ -360,6 +360,26 @@ public class OrquestadorEvaluacion {
 
 
 	private Eleccion elegibles(Candidatura candidatura, boolean sombra) {
+		return elegibles(candidatura.isSintetica(), sombra);
+	}
+
+	/**
+	 * La cadena de proveedores principal para un grupo de candidaturas: la usa el informe que
+	 * compara finalistas. Con que UNA sea real, sólo valen los aptos para datos reales.
+	 *
+	 * @return los utilizables, en orden; y si no hay ninguno, por qué se descartó cada uno.
+	 */
+	Map.Entry<List<ProveedorLlm>, List<String>> cadenaPara(boolean todasSinteticas) {
+		Eleccion eleccion = elegibles(todasSinteticas, false);
+		return Map.entry(eleccion.elegibles(), eleccion.motivosDescarte());
+	}
+
+	/** Cuenta la llamada contra el tope mensual del proveedor, como las de evaluación. */
+	void contarLlamada(String proveedor, boolean ok) {
+		registrarConsumo(proveedor, ok);
+	}
+
+	private Eleccion elegibles(boolean sintetica, boolean sombra) {
 		String periodo = YearMonth.now().toString();
 		List<ProveedorLlm> elegibles = new ArrayList<>();
 		List<String> motivos = new ArrayList<>();
@@ -377,9 +397,9 @@ public class OrquestadorEvaluacion {
 						+ " (se configura en Ajustes)");
 				continue;
 			}
-			if (!proveedor.isAptoDatosReales() && !candidatura.isSintetica()) {
-				motivos.add(proveedor.getNombre() + ": marcado como no apto para datos reales y esta"
-						+ " candidatura no es sintética");
+			if (!proveedor.isAptoDatosReales() && !sintetica) {
+				motivos.add(proveedor.getNombre() + ": marcado como no apto para datos reales y hay"
+						+ " datos de candidatos reales");
 				continue;
 			}
 			int consumidas = repoConsumo.findByProveedorAndPeriodo(proveedor.getNombre(), periodo)

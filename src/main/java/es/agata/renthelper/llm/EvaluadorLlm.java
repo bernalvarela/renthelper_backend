@@ -13,6 +13,9 @@ public interface EvaluadorLlm {
 
 	ResultadoLlm evaluar(SolicitudEvaluacion solicitud, ProveedorLlm proveedor);
 
+	/** Compara a varios finalistas en una llamada. {@code maxTokensSalida} manda sólo en ésta. */
+	ResultadoInforme comparar(String sistema, String usuario, ProveedorLlm proveedor, int maxTokensSalida);
+
 	/** Sin url, sin modelo o sin clave no se intenta la llamada. */
 	boolean disponible(ProveedorLlm proveedor);
 

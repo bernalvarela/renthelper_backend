@@ -17,6 +17,7 @@ import es.agata.renthelper.dominio.Rubrica;
 import es.agata.renthelper.formularios.ValidadorEsquema;
 import es.agata.renthelper.formularios.modelo.Paso;
 import es.agata.renthelper.llm.ProgresoEvaluaciones;
+import es.agata.renthelper.llm.ServicioInformeComparativo;
 import es.agata.renthelper.outbox.ServicioOutbox;
 import es.agata.renthelper.puntuacion.ValidadorRubrica;
 import es.agata.renthelper.repositorio.RepositorioAnuncio;
@@ -56,6 +57,7 @@ public class ServicioAdmin {
 	private final ValidadorRubrica validadorRubrica;
 	private final ServicioOutbox outbox;
 	private final ProgresoEvaluaciones progreso;
+	private final ServicioInformeComparativo informes;
 	private final String urlPublica;
 
 	public ServicioAdmin(RepositorioAnuncio repoAnuncios, RepositorioCandidatura repoCandidaturas,
@@ -64,8 +66,10 @@ public class ServicioAdmin {
 	                     RepositorioComentario repoComentarios, RepositorioAjustes repoAjustes,
 	                     BonificacionFiscal bonificacionFiscal,
 	                     ValidadorEsquema validadorEsquema, ValidadorRubrica validadorRubrica,
-	                     ServicioOutbox outbox, ProgresoEvaluaciones progreso, PropiedadesRentHelper propiedades) {
+	                     ServicioOutbox outbox, ProgresoEvaluaciones progreso,
+	                     ServicioInformeComparativo informes, PropiedadesRentHelper propiedades) {
 		this.progreso = progreso;
+		this.informes = informes;
 		this.repoAnuncios = repoAnuncios;
 		this.repoCandidaturas = repoCandidaturas;
 		this.repoEvaluaciones = repoEvaluaciones;
@@ -98,10 +102,10 @@ public class ServicioAdmin {
 		exigirCampos(peticion);
 		comprobarCompatibilidad(peticion.formSchemaId(), peticion.rubricaId());
 
-		String slug = GeneradorTokens.slug();
-		while (repoAnuncios.existsBySlug(slug)) {
-			slug = GeneradorTokens.slug();
-		}
+		// Enlace elegido a mano o, si no se pone ninguno, uno corto aleatorio.
+		String slug = peticion.slug() == null || peticion.slug().isBlank()
+				? slugAleatorio()
+				: slugLibre(peticion.slug());
 		Anuncio anuncio = new Anuncio(slug, peticion.titulo(), peticion.rentaMensual(),
 				peticion.formSchemaId(), peticion.rubricaId());
 		aplicar(anuncio, peticion);
@@ -110,6 +114,24 @@ public class ServicioAdmin {
 		log.info("Anuncio creado: {} · {} · {} € · enlace /c/{}", anuncio.getId(), anuncio.getTitulo(),
 				anuncio.getRentaMensual(), slug);
 		return aResumen(anuncio);
+	}
+
+	private String slugAleatorio() {
+		String slug = GeneradorTokens.slug();
+		while (repoAnuncios.existsBySlug(slug)) {
+			slug = GeneradorTokens.slug();
+		}
+		return slug;
+	}
+
+	/** Normaliza el enlace escrito a mano y comprueba que ningún otro anuncio lo usa ya. */
+	private String slugLibre(String texto) {
+		String slug = Slugs.validar(texto);
+		if (repoAnuncios.existsBySlug(slug)) {
+			throw ExcepcionNegocio.conflicto("ENLACE_OCUPADO",
+					"Ya hay otro anuncio con el enlace /c/" + slug + ". Elige otro.");
+		}
+		return slug;
 	}
 
 	private void exigirCampos(DtosAdmin.PeticionAnuncio peticion) {
@@ -165,6 +187,8 @@ public class ServicioAdmin {
 		if (peticion.rubricaId() != null) {
 			anuncio.setRubricaId(peticion.rubricaId());
 		}
+		// El enlace (`slug`) no se toca aunque venga: es fijo desde que se crea. Ya puede estar
+		// pegado en idealista o en manos de un candidato, y cambiarlo lo dejaría sin salida.
 		aplicar(anuncio, peticion);
 		comprobarCompatibilidad(anuncio.getFormSchemaId(), anuncio.getRubricaId());
 
@@ -247,6 +271,16 @@ public class ServicioAdmin {
 		} catch (IllegalArgumentException e) {
 			throw ExcepcionNegocio.invalido("ESTADO", "Estado desconocido: " + peticion.estado());
 		}
+		// «Pendiente» (EVALUADA o ENVIADA) deshace la decisión: el panel la ofrece en el selector
+		// de estado para corregir un descarte o una cita por error.
+		if (nuevo == EstadoCandidatura.EVALUADA || nuevo == EstadoCandidatura.ENVIADA) {
+			if (candidatura.getEstado() == EstadoCandidatura.BORRADOR) {
+				throw ExcepcionNegocio.invalido("ESTADO", "Una candidatura sin terminar no tiene decisión que deshacer.");
+			}
+			candidatura.deshacerTriaje();
+			log.info("Triaje de {} deshecho: vuelve a {}", candidatura.getId(), candidatura.getEstado());
+			return aFila(repoCandidaturas.save(candidatura));
+		}
 		if (!nuevo.esTriada()) {
 			throw ExcepcionNegocio.invalido("ESTADO", "Ese estado no es una decisión de triaje.");
 		}
@@ -293,6 +327,8 @@ public class ServicioAdmin {
 		repoEvaluaciones.deleteByCandidaturaId(candidaturaId);
 		repoEventos.deleteByCandidaturaId(candidaturaId);
 		repoComentarios.deleteByCandidaturaId(candidaturaId);
+		// Los informes comparativos en los que sale también: hablan de ella.
+		informes.olvidarCandidatura(candidatura.getAnuncioId(), candidaturaId);
 		repoCandidaturas.delete(candidatura);
 
 		log.warn("Candidatura {} del anuncio {} borrada de forma definitiva a petición del panel",

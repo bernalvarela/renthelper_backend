@@ -8,6 +8,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Component;
 
 /**
@@ -114,6 +115,61 @@ public class SpringAiEvaluadorLlm implements EvaluadorLlm {
 			}
 			return new ResultadoLlm(null, proveedor.getNombre(), proveedor.getModelo(), null, null, latencia,
 					texto, detalle);
+		}
+	}
+
+	/**
+	 * Compara a los finalistas en una sola llamada.
+	 *
+	 * <p>El techo de salida se sube sólo para esta llamada, con las opciones de la petición: el
+	 * modelo que construye {@link FabricaModelos} lleva el de la evaluación individual, que no
+	 * da para ocho personas. Un reintento de reparación si el JSON no se puede leer, como en la
+	 * evaluación.
+	 */
+	@Override
+	public ResultadoInforme comparar(String sistema, String usuario, ProveedorLlm proveedor, int maxTokensSalida) {
+		ChatModel modelo = modelo(proveedor);
+		if (modelo == null) {
+			return new ResultadoInforme(null, proveedor.getNombre(), proveedor.getModelo(), null, null, 0,
+					"Proveedor no disponible");
+		}
+		BeanOutputConverter<InformeComparativoLlm> conversor = new BeanOutputConverter<>(InformeComparativoLlm.class);
+		String conFormato = usuario + "\n\n" + conversor.getFormat();
+		// Spring AI 2 toma el builder, no las opciones construidas; se mezcla con las del modelo.
+		var techo = OpenAiChatOptions.builder().maxCompletionTokens(maxTokensSalida);
+
+		long inicio = System.currentTimeMillis();
+		try {
+			ChatResponse respuesta = peticion(modelo, proveedor).options(techo)
+					.system(sistema).user(conFormato).call().chatResponse();
+			String texto = textoDe(respuesta);
+			InformeComparativoLlm informe;
+			try {
+				informe = conversor.convert(limpiar(texto));
+			} catch (RuntimeException e) {
+				log.warn("El informe comparativo de {} no era JSON convertible, reintento: {}",
+						proveedor.getNombre(), e.getMessage());
+				String segundo = textoDe(peticion(modelo, proveedor).options(techo).system(sistema)
+						.user(conFormato + "\n\nTu respuesta anterior no era JSON válido. Devuelve SÓLO el"
+								+ " objeto JSON, sin texto alrededor ni bloques de código.")
+						.call().chatResponse());
+				informe = conversor.convert(limpiar(segundo));
+			}
+			int latencia = (int) (System.currentTimeMillis() - inicio);
+			log.info("Informe comparativo de {} en {} ms · tokens {}/{}", proveedor.getNombre(), latencia,
+					tokens(respuesta, true), tokens(respuesta, false));
+			return new ResultadoInforme(informe, proveedor.getNombre(), proveedor.getModelo(),
+					tokens(respuesta, true), tokens(respuesta, false), latencia,
+					informe == null ? "El proveedor no devolvió un JSON convertible" : null);
+		} catch (RuntimeException | LinkageError e) {
+			// LinkageError por lo mismo que en evaluar(): en la imagen nativa, una reflexión sin
+			// registrar es un Error y se colaría hasta el usuario como un 500 sin explicación.
+			int latencia = (int) (System.currentTimeMillis() - inicio);
+			String detalle = ErroresLlm.mensajeCompleto(e);
+			log.error("Fallo comparando finalistas con {} (modelo {}) tras {} ms", proveedor.getNombre(),
+					proveedor.getModelo(), latencia, e);
+			return new ResultadoInforme(null, proveedor.getNombre(), proveedor.getModelo(), null, null,
+					latencia, detalle);
 		}
 	}
 

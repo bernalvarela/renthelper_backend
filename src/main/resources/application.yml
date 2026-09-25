@@ -163,6 +163,15 @@ renthelper:
     # el proveedor; a false no sale nunca y el resto de la evaluación funciona igual.
     verificar-nombre: true
 
+  # Informe que compara a los finalistas (citadas y seleccionadas) de un anuncio. Es para decidir
+  # entre los últimos: con más de ocho el modelo se fija en unos pocos e ignora al resto. Si hay
+  # más finalistas, el panel pide elegir cuáles comparar.
+  comparativa:
+    max-finalistas: 8
+    # Propio y más alto que el de la evaluación individual: son ocho personas en una respuesta, y
+    # en los modelos de razonamiento el pensamiento cuenta como salida.
+    max-tokens-salida: 8000
+
 logging:
   level:
     es.agata.renthelper: INFO
