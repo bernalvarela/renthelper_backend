@@ -265,8 +265,8 @@ public class ConstructorPrompt {
 				los ha filtrado: todos son razonables y ahora duda entre ellos. Tu trabajo es
 				compararlos entre sí, no valorar a cada uno por separado (eso ya está hecho).
 
-				Cada candidatura viene con una letra (A, B, C...) y sin nombre. Las letras y el orden
-				en que aparecen son ALEATORIOS y no significan nada: no dejes que el orden influya.
+				Cada candidatura viene con una etiqueta (C1, C2, C3...) y sin nombre. Las etiquetas y el
+				orden en que aparecen son ALEATORIOS y no significan nada: no dejes que el orden influya.
 
 				Reglas que no puedes saltarte:
 				- Compara SÓLO por lo que importa para el alquiler: solvencia (ingresos frente a
@@ -284,28 +284,29 @@ public class ConstructorPrompt {
 				  «ingresos holgados». No inventes ni redondees cifras.
 				- Fechas en formato dd/MM/aaaa, como te llegan.
 				- Responde SIEMPRE en castellano. Texto plano, sin Markdown: se muestra tal cual.
-				- Refiérete a cada una SIEMPRE por su letra: «A», «B»...
+				- Refiérete a cada una SIEMPRE por su etiqueta completa: «C1», «C2»... Nunca «la
+				  primera», «el grupo 2» ni sólo el número: la etiqueta se sustituye luego por el nombre.
 
 				Sobre los campos:
 				- `panorama`: dos o tres frases sobre el grupo. En qué se parecen y qué los separa de
 				  verdad.
-				- `finalistas`: una entrada por letra, sin saltarte ninguna. `datosClave` es una
+				- `finalistas`: una entrada por etiqueta, sin saltarte ninguna. `datosClave` es una
 				  línea con lo esencial (ingresos frente a renta, fecha de entrada, duración,
 				  personas). `puntoFuerte` y `puntoDebil`, frente a LOS DEMÁS finalistas, no en
 				  abstracto: «la única que entra antes de que el piso quede libre».
 				- `riesgos`: quién arriesga más y en qué, comparados entre sí. Un párrafo corto.
 				- `preguntas`: preguntas concretas para la llamada o la visita que DESEMPATARÍAN.
-				  Empieza cada una por la letra a la que va dirigida: «C: ¿...?».
-				- `ordenSugerido`: todas las letras, de la que más te convence a la que menos, con
+				  Empieza cada una por la etiqueta a la que va dirigida: «C3: ¿...?».
+				- `ordenSugerido`: todas las etiquetas, de la que más te convence a la que menos, con
 				  el motivo en una frase. Es una opinión y así se presentará: el propietario decide.
 				""".formatted(finalistas);
 	}
 
 	/**
-	 * Los datos de los finalistas, cada uno bajo su letra. Sin nombre, teléfono ni correo, y sin
+	 * Los datos de los finalistas, cada uno bajo su etiqueta. Sin nombre, teléfono ni correo, y sin
 	 * la bonificación fiscal: sale de la edad, y comparar personas no puede tocar la edad.
 	 *
-	 * @param finalistas letra → solicitud, ya barajados; se presentan en ese orden.
+	 * @param finalistas etiqueta (C1, C2...) → solicitud, ya barajados; se presentan en ese orden.
 	 */
 	public String usuarioComparativa(Map<String, SolicitudEvaluacion> finalistas) {
 		SolicitudEvaluacion cualquiera = finalistas.values().iterator().next();
@@ -320,8 +321,8 @@ public class ConstructorPrompt {
 			sb.append("- Disponible desde: ").append(FECHA_ES.format(cualquiera.disponibleDesde())).append('\n');
 		}
 
-		finalistas.forEach((letra, solicitud) -> {
-			sb.append("\n\n# Candidatura ").append(letra).append('\n');
+		finalistas.forEach((etiqueta, solicitud) -> {
+			sb.append("\n\n# Candidatura ").append(etiqueta).append('\n');
 			sb.append("- Puntuación de reglas: ").append(solicitud.determinista().puntuacion()).append("/100\n");
 			for (CriterioPuntuado criterio : paraElPrompt(solicitud.determinista().desglose())) {
 				if (criterio.detalle() != null && !criterio.detalle().isBlank()) {

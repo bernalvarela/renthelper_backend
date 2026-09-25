@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
  * entre los últimos: con veinte el modelo se fija en unos pocos e ignora al resto. Si hay más,
  * el panel pide elegir cuáles.
  *
- * <p>Se mandan barajadas, con letra y sin nombre, y con las mismas salvaguardas que la
+ * <p>Se mandan barajadas, con etiqueta (C1, C2...) y sin nombre, y con las mismas salvaguardas que la
  * evaluación individual: si alguna es real, sólo modelos aptos para datos reales.
  *
  * <p>La llamada va en la petición y no por el outbox: se pide a mano y se espera el resultado
@@ -133,18 +133,19 @@ public class ServicioInformeComparativo {
 			elegidas.add(candidatura);
 		}
 
-		// Barajadas: los modelos favorecen al primero o al último que leen. Y con letra en vez de
-		// nombre, que al modelo no le hace falta para comparar.
+		// Barajadas: los modelos favorecen al primero o al último que leen. Y con etiqueta (C1,
+		// C2...) en vez de nombre, que al modelo no le hace falta para comparar; al leer el
+		// informe se cambian de vuelta por los nombres.
 		Collections.shuffle(elegidas);
 		Rubrica rubrica = repoRubricas.findById(anuncio.getRubricaId())
 				.orElseThrow(() -> ExcepcionNegocio.noEncontrado("Rúbrica inexistente"));
-		Map<String, SolicitudEvaluacion> porLetra = new LinkedHashMap<>();
-		Map<String, String> letras = new LinkedHashMap<>();
+		Map<String, SolicitudEvaluacion> porEtiqueta = new LinkedHashMap<>();
+		Map<String, String> etiquetas = new LinkedHashMap<>();
 		for (int i = 0; i < elegidas.size(); i++) {
-			String letra = String.valueOf((char) ('A' + i));
+			String etiqueta = EtiquetasFinalistas.etiqueta(i);
 			Candidatura candidatura = elegidas.get(i);
-			porLetra.put(letra, solicitud(candidatura, anuncio, rubrica));
-			letras.put(letra, candidatura.getId().toString());
+			porEtiqueta.put(etiqueta, solicitud(candidatura, anuncio, rubrica));
+			etiquetas.put(etiqueta, candidatura.getId().toString());
 		}
 
 		boolean todasSinteticas = elegidas.stream().allMatch(Candidatura::isSintetica);
@@ -155,7 +156,7 @@ public class ServicioInformeComparativo {
 		}
 
 		String sistema = constructorPrompt.sistemaComparativa(elegidas.size());
-		String usuario = constructorPrompt.usuarioComparativa(porLetra);
+		String usuario = constructorPrompt.usuarioComparativa(porEtiqueta);
 		List<String> fallos = new ArrayList<>();
 		for (ProveedorLlm proveedor : cadena.getKey()) {
 			log.info("Comparando {} finalistas del anuncio {} con {}", elegidas.size(), anuncio.getSlug(),
@@ -164,7 +165,7 @@ public class ServicioInformeComparativo {
 					propiedades.comparativa().maxTokensSalida());
 			orquestador.contarLlamada(proveedor.getNombre(), resultado.correcto());
 			if (resultado.correcto()) {
-				InformeComparativo informe = repoInformes.save(new InformeComparativo(anuncioId, letras,
+				InformeComparativo informe = repoInformes.save(new InformeComparativo(anuncioId, etiquetas,
 						resultado.informe(), resultado.proveedor(), resultado.modelo(),
 						propiedades.llm().promptVersion(), resultado.tokensEntrada(), resultado.tokensSalida(),
 						resultado.latenciaMs()));
@@ -212,44 +213,51 @@ public class ServicioInformeComparativo {
 	}
 
 	/**
-	 * Traduce las letras a personas. Desactualizado = alguna ya no es finalista, se ha borrado, o
-	 * ha cambiado (repuntuada, respuestas corregidas) después de hacerse el informe.
+	 * Traduce las etiquetas a personas, también dentro del texto: el modelo escribe «C2 tiene
+	 * menos margen que C4», y eso no le dice nada a quien lo lee. Desactualizado = alguna ya no es
+	 * finalista, se ha borrado, o ha cambiado (repuntuada, respuestas corregidas) después.
 	 */
 	private DtosAdmin.InformeComparativoDto aDto(InformeComparativo informe, List<Candidatura> finalistasActuales) {
 		Map<UUID, Candidatura> actuales = finalistasActuales.stream()
 				.collect(Collectors.toMap(Candidatura::getId, Function.identity()));
-		Map<String, UUID> idPorLetra = new LinkedHashMap<>();
-		informe.getCandidaturas().forEach((letra, id) -> idPorLetra.put(letra, UUID.fromString(id)));
-		Map<UUID, Candidatura> todas = repoCandidaturas.findAllById(idPorLetra.values()).stream()
+		Map<String, UUID> idPorEtiqueta = new LinkedHashMap<>();
+		informe.getCandidaturas().forEach((etiqueta, id) -> idPorEtiqueta.put(etiqueta, UUID.fromString(id)));
+		Map<UUID, Candidatura> todas = repoCandidaturas.findAllById(idPorEtiqueta.values()).stream()
 				.collect(Collectors.toMap(Candidatura::getId, Function.identity()));
 
-		boolean desactualizado = idPorLetra.values().stream().anyMatch(id -> {
+		boolean desactualizado = idPorEtiqueta.values().stream().anyMatch(id -> {
 			Candidatura actual = actuales.get(id);
 			return actual == null || actual.getActualizadaEn().isAfter(informe.getCreadoEn());
 		});
 
+		Map<String, String> nombres = new LinkedHashMap<>();
+		idPorEtiqueta.forEach((etiqueta, id) -> nombres.put(etiqueta, nombre(todas.get(id))));
+		Function<String, String> conNombres = texto -> EtiquetasFinalistas.sustituir(texto, nombres);
+
 		InformeComparativoLlm contenido = informe.getContenido();
 		List<DtosAdmin.FinalistaInforme> finalistas = contenido.finalistas().stream()
 				.map(f -> {
-					UUID id = idPorLetra.get(f.etiqueta());
+					UUID id = idPorEtiqueta.get(f.etiqueta());
 					Candidatura candidatura = id == null ? null : todas.get(id);
 					return new DtosAdmin.FinalistaInforme(f.etiqueta(), id, nombre(candidatura),
 							candidatura == null ? null : candidatura.getPuntuacion(),
 							candidatura == null ? null : candidatura.getEstado().name(),
-							f.datosClave(), f.puntoFuerte(), f.puntoDebil());
+							conNombres.apply(f.datosClave()), conNombres.apply(f.puntoFuerte()),
+							conNombres.apply(f.puntoDebil()));
 				})
 				.toList();
 		List<DtosAdmin.PosicionInforme> orden = contenido.ordenSugerido().stream()
 				.map(p -> {
-					UUID id = idPorLetra.get(p.etiqueta());
+					UUID id = idPorEtiqueta.get(p.etiqueta());
 					return new DtosAdmin.PosicionInforme(p.etiqueta(), id,
-							nombre(id == null ? null : todas.get(id)), p.motivo());
+							nombre(id == null ? null : todas.get(id)), conNombres.apply(p.motivo()));
 				})
 				.toList();
 
 		return new DtosAdmin.InformeComparativoDto(informe.getId(), informe.getCreadoEn(), informe.getProveedor(),
 				informe.getModelo(), informe.getPromptVersion(), informe.getLatenciaMs(), desactualizado,
-				contenido.panorama(), finalistas, contenido.riesgos(), contenido.preguntas(), orden);
+				conNombres.apply(contenido.panorama()), finalistas, conNombres.apply(contenido.riesgos()),
+				contenido.preguntas().stream().map(conNombres).toList(), orden);
 	}
 
 	private static String nombre(Candidatura candidatura) {
