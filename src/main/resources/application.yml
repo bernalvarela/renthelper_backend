@@ -163,6 +163,12 @@ renthelper:
     # el proveedor; a false no sale nunca y el resto de la evaluación funciona igual.
     verificar-nombre: true
 
+  # La tabla se ordena por la media entre la nota del modelo y la tuya (la del modelo se sigue
+  # enseñando aparte y es la que usa «Comparar modelos»). Sin nota tuya, cuenta la del modelo.
+  # 0.5 = mitad y mitad; súbelo si tu opinión, después de hablar con alguien, debe pesar más.
+  nota:
+    peso-manual: 0.5
+
   # Informe que compara a los finalistas (citadas y seleccionadas) de un anuncio. Es para decidir
   # entre los últimos: con más de ocho el modelo se fija en unos pocos e ignora al resto. Si hay
   # más finalistas, el panel pide elegir cuáles comparar.

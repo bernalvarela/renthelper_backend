@@ -19,6 +19,7 @@ import es.agata.renthelper.formularios.modelo.Paso;
 import es.agata.renthelper.llm.ProgresoEvaluaciones;
 import es.agata.renthelper.llm.ServicioInformeComparativo;
 import es.agata.renthelper.outbox.ServicioOutbox;
+import es.agata.renthelper.puntuacion.NotaCombinada;
 import es.agata.renthelper.puntuacion.ValidadorRubrica;
 import es.agata.renthelper.repositorio.RepositorioAnuncio;
 import es.agata.renthelper.repositorio.RepositorioCandidatura;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -59,6 +61,7 @@ public class ServicioAdmin {
 	private final ProgresoEvaluaciones progreso;
 	private final ServicioInformeComparativo informes;
 	private final String urlPublica;
+	private final double pesoManual;
 
 	public ServicioAdmin(RepositorioAnuncio repoAnuncios, RepositorioCandidatura repoCandidaturas,
 	                     RepositorioEvaluacion repoEvaluaciones, RepositorioEsquemaFormulario repoEsquemas,
@@ -83,6 +86,7 @@ public class ServicioAdmin {
 		this.validadorRubrica = validadorRubrica;
 		this.outbox = outbox;
 		this.urlPublica = propiedades.urlPublica();
+		this.pesoManual = propiedades.nota().pesoManual();
 	}
 
 	// --- Anuncios ----------------------------------------------------------------------
@@ -242,10 +246,19 @@ public class ServicioAdmin {
 		List<UUID> ids = candidaturas.stream().map(Candidatura::getId).toList();
 		Map<UUID, java.time.Instant> enCola = outbox.evaluacionesEnCola(ids);
 		Map<UUID, ProgresoEvaluaciones.Paso> pasos = progreso.de(ids);
+		// Ordenadas por la nota combinada (la del modelo con la tuya), no por la del modelo sola:
+		// las que no cumplen mínimos al final igualmente, y a igual nota, la que llegó antes.
 		return candidaturas.stream()
 				.map(c -> aFila(c, ajustes, enCola.get(c.getId()), pasos.get(c.getId())))
+				.sorted(ORDEN_TRIAJE)
 				.toList();
 	}
+
+	private static final Comparator<DtosAdmin.FilaCandidatura> ORDEN_TRIAJE =
+			Comparator.comparing(DtosAdmin.FilaCandidatura::noCumpleMinimos)
+					.thenComparing(DtosAdmin.FilaCandidatura::puntuacionCombinada,
+							Comparator.nullsLast(Comparator.reverseOrder()))
+					.thenComparing(DtosAdmin.FilaCandidatura::enviadaEn, Comparator.nullsLast(Comparator.naturalOrder()));
 
 	@Transactional(readOnly = true)
 	public DtosAdmin.FichaCandidatura ficha(UUID candidaturaId) {
@@ -284,6 +297,7 @@ public class ServicioAdmin {
 		if (!nuevo.esTriada()) {
 			throw ExcepcionNegocio.invalido("ESTADO", "Ese estado no es una decisión de triaje.");
 		}
+		exigirNotaValida(peticion.puntuacionManual());
 		candidatura.triar(nuevo, peticion.puntuacionManual());
 		log.info("Triaje de {} ({}): {}{}", candidatura.getId(), candidatura.getNombre(), nuevo,
 				peticion.puntuacionManual() == null ? "" : " · nota manual " + peticion.puntuacionManual());
@@ -612,9 +626,17 @@ public class ServicioAdmin {
 	public DtosAdmin.FilaCandidatura anotarNota(UUID candidaturaId, DtosAdmin.PeticionNota peticion) {
 		Candidatura candidatura = repoCandidaturas.findById(candidaturaId)
 				.orElseThrow(() -> ExcepcionNegocio.noEncontrado("Candidatura inexistente"));
+		exigirNotaValida(peticion.puntuacionManual());
 		candidatura.ponerNotaManual(peticion.puntuacionManual());
 		log.info("Nota manual de {}: {}", candidaturaId, peticion.puntuacionManual());
 		return aFila(repoCandidaturas.save(candidatura));
+	}
+
+	/** Tu nota va en la misma escala que la del modelo, de 0 a 100; vacía = sin nota. */
+	private static void exigirNotaValida(Integer nota) {
+		if (nota != null && (nota < 0 || nota > 100)) {
+			throw ExcepcionNegocio.invalido("NOTA", "Tu nota tiene que estar entre 0 y 100.");
+		}
 	}
 
 	private DtosAdmin.FilaCandidatura aFila(Candidatura candidatura) {
@@ -636,7 +658,9 @@ public class ServicioAdmin {
 				candidatura.getVerificacionNombre(), candidatura.getMotivoNombre(),
 				candidatura.isLlmOmitidoPorNombre(),
 				candidatura.getPuntuacion(),
-				candidatura.getPuntuacionManual(), candidatura.getEstado().name(),
+				candidatura.getPuntuacionManual(),
+				NotaCombinada.calcular(candidatura.getPuntuacion(), candidatura.getPuntuacionManual(), pesoManual),
+				candidatura.getEstado().name(),
 				candidatura.isNoCumpleMinimos(), candidatura.getMotivosMinimos(), candidatura.isSintetica(),
 				candidatura.getEnviadaEn(), candidatura.getActualizadaEn(),
 				candidatura.getSegundosCumplimentacion(),

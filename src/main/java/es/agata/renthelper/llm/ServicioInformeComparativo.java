@@ -11,6 +11,7 @@ import es.agata.renthelper.dominio.ProveedorLlm;
 import es.agata.renthelper.dominio.Rubrica;
 import es.agata.renthelper.puntuacion.ContextoAnuncio;
 import es.agata.renthelper.puntuacion.MotorDeterminista;
+import es.agata.renthelper.puntuacion.NotaCombinada;
 import es.agata.renthelper.repositorio.RepositorioAnuncio;
 import es.agata.renthelper.repositorio.RepositorioCandidatura;
 import es.agata.renthelper.repositorio.RepositorioEsquemaFormulario;
@@ -96,7 +97,7 @@ public class ServicioInformeComparativo {
 				propiedades.comparativa().maxFinalistas(),
 				finalistas.stream()
 						.map(c -> new DtosAdmin.FinalistaElegible(c.getId(), c.getNombre(), c.getPuntuacion(),
-								c.getEstado().name()))
+								c.getPuntuacionManual(), combinada(c), c.getEstado().name()))
 						.toList(),
 				ultimo);
 	}
@@ -193,12 +194,21 @@ public class ServicioInformeComparativo {
 		}
 	}
 
+	/**
+	 * Ordenadas por la nota combinada, como la tabla: el panel marca por defecto las primeras.
+	 * Tu nota NO se manda al modelo: la comparativa tiene que ser una segunda opinión, y con tu
+	 * nota delante tendería a darte la razón.
+	 */
 	private List<Candidatura> finalistas(UUID anuncioId) {
 		return repoCandidaturas.paraTriaje(anuncioId, false).stream()
 				.filter(c -> FINALISTAS.contains(c.getEstado()))
-				.sorted(Comparator.comparing(Candidatura::getPuntuacion,
-						Comparator.nullsLast(Comparator.reverseOrder())))
+				.sorted(Comparator.comparing(this::combinada, Comparator.nullsLast(Comparator.reverseOrder())))
 				.toList();
+	}
+
+	private Integer combinada(Candidatura candidatura) {
+		return NotaCombinada.calcular(candidatura.getPuntuacion(), candidatura.getPuntuacionManual(),
+				propiedades.nota().pesoManual());
 	}
 
 	/** Lo mismo que se le da al modelo en la evaluación individual, sin nombre ni bonificación. */
@@ -241,6 +251,8 @@ public class ServicioInformeComparativo {
 					Candidatura candidatura = id == null ? null : todas.get(id);
 					return new DtosAdmin.FinalistaInforme(f.etiqueta(), id, nombre(candidatura),
 							candidatura == null ? null : candidatura.getPuntuacion(),
+							candidatura == null ? null : candidatura.getPuntuacionManual(),
+							candidatura == null ? null : combinada(candidatura),
 							candidatura == null ? null : candidatura.getEstado().name(),
 							conNombres.apply(f.datosClave()), conNombres.apply(f.puntoFuerte()),
 							conNombres.apply(f.puntoDebil()));

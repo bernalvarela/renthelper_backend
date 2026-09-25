@@ -67,8 +67,12 @@ public final class DtosAdmin {
 			String motivoNombre,
 			/** La llamada al LLM se saltó por nombre inventado; el panel ofrece lanzarla. */
 			boolean llmOmitidoPorNombre,
+			/** La del modelo: reglas + ajuste del LLM. */
 			Integer puntuacion,
+			/** La tuya, de 0 a 100. */
 			Integer puntuacionManual,
+			/** Por la que se ordena: la media ponderada de las dos, o la del modelo si no hay tuya. */
+			Integer puntuacionCombinada,
 			String estado,
 			boolean noCumpleMinimos,
 			List<String> motivosMinimos,
@@ -146,7 +150,8 @@ public final class DtosAdmin {
 	}
 
 	/** Una candidatura citada o seleccionada, candidata a entrar en la comparación. */
-	public record FinalistaElegible(UUID id, String nombre, Integer puntuacion, String estado) {
+	public record FinalistaElegible(UUID id, String nombre, Integer puntuacion, Integer puntuacionManual,
+	                                Integer puntuacionCombinada, String estado) {
 	}
 
 	public record PeticionComparativa(List<UUID> candidaturaIds) {
@@ -170,7 +175,9 @@ public final class DtosAdmin {
 	}
 
 	/** Un finalista del informe, ya con su nombre: al modelo sólo le llegó la letra. */
-	public record FinalistaInforme(String etiqueta, UUID candidaturaId, String nombre, Integer puntuacion,
+	public record FinalistaInforme(String etiqueta, UUID candidaturaId, String nombre,
+	                               /** Las tres notas: la del modelo, la tuya y la combinada. */
+	                               Integer puntuacion, Integer puntuacionManual, Integer puntuacionCombinada,
 	                               String estado, String datosClave, String puntoFuerte, String puntoDebil) {
 	}
 

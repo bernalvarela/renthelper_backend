@@ -17,7 +17,26 @@ public record PropiedadesRentHelper(
 		Retencion retencion,
 		Outbox outbox,
 		Llm llm,
-		Comparativa comparativa) {
+		Comparativa comparativa,
+		Nota nota) {
+
+	/**
+	 * La nota por la que se ordena la tabla: la del modelo mezclada con la tuya.
+	 *
+	 * @param pesoManual cuánto pesa tu nota, de 0 a 1. 0,5 = la media de las dos; más alto si
+	 *                   después de hablar con alguien tu opinión debe mandar más.
+	 */
+	public record Nota(Double pesoManual) {
+
+		public Nota {
+			pesoManual = pesoManual == null ? 0.5 : Math.clamp(pesoManual, 0.0, 1.0);
+		}
+	}
+
+	/** Sin bloque en el yml el record llega a null: la media, 50/50. */
+	public Nota nota() {
+		return nota == null ? new Nota(null) : nota;
+	}
 
 	/**
 	 * El informe que compara a los finalistas de un anuncio en una sola llamada al modelo.
