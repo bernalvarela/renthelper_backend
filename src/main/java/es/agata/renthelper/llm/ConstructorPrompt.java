@@ -7,6 +7,9 @@ import es.agata.renthelper.formularios.modelo.TipoCampo;
 import es.agata.renthelper.puntuacion.modelo.CriterioPuntuado;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +36,9 @@ public class ConstructorPrompt {
 			Set.of(TipoCampo.TELEFONO, TipoCampo.EMAIL, TipoCampo.CONSENTIMIENTO);
 
 	private static final String IDIOMA_PROMPT = "es";
+
+	/** Las fechas que ve el modelo, y por tanto las que escribe: formato español. */
+	private static final DateTimeFormatter FECHA_ES = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
 	/** Cuántos criterios del desglose se le pasan al modelo además de los que llevan cifras. */
 	private static final int CRITERIOS_EN_PROMPT = 4;
@@ -87,6 +93,9 @@ public class ConstructorPrompt {
 				  es informar de que el contrato desgravaría y otra colocar a alguien por debajo por
 				  haber nacido antes.
 				- Responde SIEMPRE en castellano, aunque el candidato haya contestado en otro idioma.
+				- Las fechas, en TODOS los campos de texto, con el formato español dd/MM/aaaa:
+				  «01/10/2026». Nunca «2026-10-01», ni «1 de octubre», ni sin el año. Ya te llegan
+				  así en los datos: cópialas tal cual.
 
 				Sobre los campos de texto:
 				- `resumen`: los hechos, sin juicio, y TODOS. Es la foto completa de lo que ha
@@ -104,9 +113,34 @@ public class ConstructorPrompt {
 				  Las respuestas negativas también son datos: «sin mascotas», «no fuman», «sin
 				  referencias». Si una pregunta está sin contestar, no la inventes ni digas que falta:
 				  eso va a `preguntasPendientes`.
-				  Frases cortas, sin adornos, en un párrafo o en líneas separadas por bloque. La regla
-				  de arriba sigue valiendo aquí: nada de origen, nacionalidad, estado civil, hijos ni
-				  lo demás de esa lista, aunque aparezca en el texto libre.
+				  La regla de arriba sigue valiendo aquí: nada de origen, nacionalidad, estado civil,
+				  hijos ni lo demás de esa lista, aunque aparezca en el texto libre.
+
+				  Formato del `resumen`, para leerlo de un vistazo en el móvil:
+				  · Un párrafo corto por bloque, separados por una línea en blanco, y cada uno
+				    empieza por su rótulo seguido de dos puntos. En este orden, y omitiendo el que
+				    no tenga nada: «Fechas:», «Hogar:», «Trabajo e ingresos:», «Convivencia:» y
+				    «En sus palabras:».
+				  · En «Trabajo e ingresos:», una línea por persona («Persona 1: …») y al final una
+				    línea con el total del hogar.
+				  · Frases cortas y directas, sin adornos. Cifras con su unidad: «1.800 €/mes».
+				  · Texto plano: NADA de Markdown (ni asteriscos, ni almohadillas, ni guiones de
+				    lista). Se muestra tal cual en el panel y en Telegram, y los símbolos se verían.
+				  Ejemplo de forma (los datos son inventados):
+				  Fechas: entrarían el 01/10/2026, para más de 3 años; pueden visitar entre semana
+				  por la tarde.
+
+				  Hogar: 2 personas, cada una en su habitación; firman las 2 y ya conviven.
+
+				  Trabajo e ingresos:
+				  Persona 1: indefinido desde hace 4 años, 1.600 €/mes.
+				  Persona 2: temporal desde hace 8 meses, 1.100 €/mes.
+				  Total: 2.700 €/mes.
+
+				  Convivencia: sin mascotas, no fuman, 5 años en su vivienda actual, aportan
+				  referencias del casero y nóminas.
+
+				  En sus palabras: trabajan cerca y buscan algo estable.
 				- `valoracion`: el juicio, y NO un resumen —ese ya lo has escrito arriba—. En dos o
 				  tres frases, di lo que los datos no dicen por sí solos: si las respuestas encajan
 				  entre sí o se contradicen, qué riesgo concreto ves, qué distingue a este candidato
@@ -168,7 +202,7 @@ public class ConstructorPrompt {
 			sb.append("- Habitaciones: ").append(solicitud.habitaciones()).append('\n');
 		}
 		if (solicitud.disponibleDesde() != null) {
-			sb.append("- Disponible desde: ").append(solicitud.disponibleDesde()).append('\n');
+			sb.append("- Disponible desde: ").append(FECHA_ES.format(solicitud.disponibleDesde())).append('\n');
 		}
 
 		// Ya calculado por el motor. Al modelo se le pide que lo diga, no que lo deduzca.
@@ -297,6 +331,9 @@ public class ConstructorPrompt {
 		if (campo.tipo() == TipoCampo.BOOLEANO) {
 			return Boolean.parseBoolean(String.valueOf(valor)) ? "sí" : "no";
 		}
+		if (campo.tipo() == TipoCampo.FECHA) {
+			return fechaEspanola(String.valueOf(valor));
+		}
 		if (campo.tipo().esSeleccion()) {
 			if (valor instanceof List<?> seleccion) {
 				return seleccion.stream().map(v -> etiquetaOpcion(campo, v)).reduce((a, b) -> a + ", " + b)
@@ -308,6 +345,19 @@ public class ConstructorPrompt {
 		// anonimizador sólo actúa sobre lo que parece un teléfono o un correo, así que un importe
 		// o una fecha pasan intactos.
 		return Anonimizador.limpiar(String.valueOf(valor));
+	}
+
+	/**
+	 * La fecha como la queremos leer en el resumen. Se le da ya formateada al modelo en vez de
+	 * pedirle que convierta el ISO del formulario: copiar es más fiable que transformar. Si no
+	 * es una fecha ISO (un esquema viejo, un valor a mano), pasa tal cual.
+	 */
+	static String fechaEspanola(String valor) {
+		try {
+			return FECHA_ES.format(LocalDate.parse(valor.length() > 10 ? valor.substring(0, 10) : valor));
+		} catch (DateTimeParseException e) {
+			return valor;
+		}
 	}
 
 	private String etiquetaOpcion(Campo campo, Object valor) {

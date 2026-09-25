@@ -140,12 +140,14 @@ renthelper:
     digest-cron: "0 0 9,12,15,18,21 * * *"
 
   llm:
-    # v5: el resumen recoge TODAS las respuestas del candidato (mascotas, fumadores, referencias...),
-    # no dos frases. Antes: v4 hizo que la valoración mencione siempre la solvencia; v3 separó
-    # resumen de valoración y metió el veredicto del nombre en la misma llamada. Se guarda en cada
+    # v6: el resumen va en párrafos con rótulo por bloque, y todas las fechas en dd/MM/aaaa (ya se
+    # le pasan así al modelo). Antes: v5 hizo que el resumen recoja TODAS las respuestas del
+    # candidato (mascotas, fumadores, referencias...), no dos frases; v4 hizo que la valoración
+    # mencione siempre la solvencia; v3 separó resumen de valoración y metió el veredicto del
+    # nombre en la misma llamada. Se guarda en cada
     # evaluación, así que las anteriores siguen identificadas con su versión y la comparación entre
     # ellas no miente.
-    prompt-version: v5
+    prompt-version: v6
     ajuste-maximo: 15
     # Se aplican a todos los proveedores al construir su cliente.
     #
