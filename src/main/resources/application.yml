@@ -140,8 +140,8 @@ renthelper:
     digest-cron: "0 0 9,12,15,18,21 * * *"
 
   llm:
-    # v6: el resumen va en párrafos con rótulo por bloque, y todas las fechas en dd/MM/aaaa (ya se
-    # le pasan así al modelo). Antes: v5 hizo que el resumen recoja TODAS las respuestas del
+    # v6: el resumen y la valoración van en párrafos con rótulo, y todas las fechas en dd/MM/aaaa
+    # (ya se le pasan así al modelo). Antes: v5 hizo que el resumen recoja TODAS las respuestas del
     # candidato (mascotas, fumadores, referencias...), no dos frases; v4 hizo que la valoración
     # mencione siempre la solvencia; v3 separó resumen de valoración y metió el veredicto del
     # nombre en la misma llamada. Se guarda en cada

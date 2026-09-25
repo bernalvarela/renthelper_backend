@@ -164,6 +164,25 @@ public class ConstructorPrompt {
 
 				  Si de verdad no hay nada que añadir, dilo en una línea y baja la confianza. Eso es
 				  información; repetir el formulario no lo es.
+
+				  Formato de la `valoracion`, igual que el resumen, para leerla de un vistazo:
+				  · Párrafos cortos separados por una línea en blanco, cada uno con su rótulo y dos
+				    puntos, en este orden: «Solvencia:» (siempre), «Encaje:» (si las respuestas
+				    cuadran entre sí o se contradicen), «Riesgos:» (lo concreto que te preocupe) y
+				    «Ajuste:» (una frase con por qué le das ese ajuste). Omite «Encaje:» o «Riesgos:»
+				    si no tienes nada real que decir en ellos; no los rellenes.
+				  · Frases cortas; cifras con su unidad y fechas en dd/MM/aaaa.
+				  · Texto plano, sin Markdown, por lo mismo que el resumen.
+				  El ejemplo «Bien» de arriba, con este formato:
+				  Solvencia: holgada, 2.800 €/mes entre los dos para una renta de 750 €, con
+				  contratos indefinidos que encajan con la antigüedad declarada.
+
+				  Encaje: piden entrar mucho antes de que el piso quede libre; conviene aclarar si es
+				  un error al rellenarlo.
+
+				  Riesgos: bajo riesgo de rotación.
+
+				  Ajuste: +5, por la estabilidad laboral de los dos firmantes.
 				- `preguntasPendientes`: ahí va todo lo que falte por saber, en forma de pregunta
 				  concreta que se pueda hacer por teléfono o en la visita. Es la lista con la que el
 				  propietario llama, así que una respuesta escueta del candidato debe convertirse en
